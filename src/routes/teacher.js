@@ -2697,3 +2697,129 @@ router.get('/grades/download', async (req, res) => {
 });
 
 module.exports = router;
+
+
+// GET Export Exam Questions to Excel
+router.get('/exams/:id/export', async (req, res) => {
+  const user = req.session.user;
+  const examId = req.params.id;
+
+  try {
+    // Get exam data
+    const [[exam]] = await pool.query(
+      `SELECT e.*, s.name as subject_name 
+       FROM exams e
+       JOIN subjects s ON e.subject_id = s.id
+       WHERE e.id = :id AND e.teacher_id = :tid LIMIT 1;`,
+      { id: examId, tid: user.id }
+    );
+
+    if (!exam) {
+      req.flash('error', 'Ujian tidak ditemukan.');
+      return res.redirect('/teacher/exams');
+    }
+
+    // Get questions with options
+    const [questions] = await pool.query(
+      `SELECT q.*, 
+        (SELECT GROUP_CONCAT(
+          CONCAT(o.option_label, '|', o.option_text, '|', o.is_correct)
+          ORDER BY o.option_label SEPARATOR ';;'
+        ) FROM options o WHERE o.question_id = q.id) as options_data
+       FROM questions q
+       WHERE q.exam_id = :exam_id
+       ORDER BY q.id ASC;`,
+      { exam_id: examId }
+    );
+
+    // Prepare data for Excel
+    const excelData = [];
+    
+    // Add header info
+    excelData.push(['SOAL UJIAN']);
+    excelData.push(['Judul Ujian', exam.title]);
+    excelData.push(['Mata Pelajaran', exam.subject_name]);
+    excelData.push(['Durasi', `${exam.duration_minutes} menit`]);
+    excelData.push(['Passing Score', exam.pass_score]);
+    excelData.push(['Total Soal', questions.length]);
+    excelData.push([]); // Empty row
+    
+    // Add table header
+    excelData.push([
+      'No',
+      'Soal',
+      'Opsi A',
+      'Opsi B',
+      'Opsi C',
+      'Opsi D',
+      'Opsi E',
+      'Jawaban Benar',
+      'Poin'
+    ]);
+
+    // Add questions
+    questions.forEach((q, index) => {
+      const options = {};
+      let correctAnswer = '';
+      
+      if (q.options_data) {
+        const optionsArray = q.options_data.split(';;');
+        optionsArray.forEach(opt => {
+          const [label, text, isCorrect] = opt.split('|');
+          options[label] = text;
+          if (isCorrect === '1') {
+            correctAnswer = label;
+          }
+        });
+      }
+
+      excelData.push([
+        index + 1,
+        q.question_text,
+        options['A'] || '',
+        options['B'] || '',
+        options['C'] || '',
+        options['D'] || '',
+        options['E'] || '',
+        correctAnswer,
+        q.points || 1
+      ]);
+    });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 5 },   // No
+      { wch: 50 },  // Soal
+      { wch: 30 },  // Opsi A
+      { wch: 30 },  // Opsi B
+      { wch: 30 },  // Opsi C
+      { wch: 30 },  // Opsi D
+      { wch: 30 },  // Opsi E
+      { wch: 10 },  // Jawaban Benar
+      { wch: 8 }    // Poin
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Soal Ujian');
+
+    // Generate buffer
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set headers for download
+    const filename = `Soal_${exam.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    
+    // Send file
+    res.send(buffer);
+
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal export soal ujian.');
+    res.redirect(`/teacher/exams/${examId}`);
+  }
+});
