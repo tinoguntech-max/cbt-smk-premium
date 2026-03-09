@@ -2082,3 +2082,252 @@ router.post('/materials/bulk-delete', async (req, res) => {
 });
 
 module.exports = router;
+
+
+// ===== ASSIGNMENTS MANAGEMENT =====
+
+// GET Admin Assignments List
+router.get('/assignments', async (req, res) => {
+  try {
+    const search = (req.query.search || '').trim();
+    const subject_id = req.query.subject_id || '';
+    const status = req.query.status || '';
+
+    // Get subjects for filter
+    const [subjects] = await pool.query(`SELECT id, name FROM subjects ORDER BY name ASC;`);
+
+    // Build WHERE clause
+    let whereConditions = ['1=1'];
+    let queryParams = {};
+
+    if (search) {
+      whereConditions.push(`(a.title LIKE :search OR u.full_name LIKE :search)`);
+      queryParams.search = `%${search}%`;
+    }
+
+    if (subject_id) {
+      whereConditions.push(`a.subject_id = :subject_id`);
+      queryParams.subject_id = subject_id;
+    }
+
+    if (status === 'published') {
+      whereConditions.push(`a.is_published = 1`);
+    } else if (status === 'draft') {
+      whereConditions.push(`a.is_published = 0`);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Get assignments
+    const [assignments] = await pool.query(
+      `SELECT 
+        a.*,
+        u.full_name as teacher_name,
+        s.name as subject_name,
+        c.name as class_name,
+        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) as submission_count
+      FROM assignments a
+      JOIN users u ON a.teacher_id = u.id
+      JOIN subjects s ON a.subject_id = s.id
+      LEFT JOIN classes c ON a.class_id = c.id
+      WHERE ${whereClause}
+      ORDER BY a.created_at DESC;`,
+      queryParams
+    );
+
+    // Get stats
+    const [[statsRow]] = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN is_published = 1 THEN 1 ELSE 0 END) as published,
+        SUM(CASE WHEN is_published = 0 THEN 1 ELSE 0 END) as draft,
+        (SELECT COUNT(*) FROM assignment_submissions) as submissions
+      FROM assignments;
+    `);
+
+    const stats = {
+      total: statsRow.total || 0,
+      published: statsRow.published || 0,
+      draft: statsRow.draft || 0,
+      submissions: statsRow.submissions || 0
+    };
+
+    res.render('admin/assignments', {
+      title: 'Manajemen Tugas',
+      assignments,
+      subjects,
+      stats,
+      search,
+      subject_id,
+      status
+    });
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal memuat data tugas.');
+    res.redirect('/admin');
+  }
+});
+
+// POST Delete Assignment
+router.post('/assignments/:id/delete', async (req, res) => {
+  const assignmentId = req.params.id;
+  
+  try {
+    await pool.query(`DELETE FROM assignments WHERE id = :id;`, { id: assignmentId });
+    req.flash('success', 'Tugas berhasil dihapus.');
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal menghapus tugas.');
+  }
+  
+  res.redirect('/admin/assignments');
+});
+
+// POST Bulk Delete Assignments
+router.post('/assignments/bulk-delete', async (req, res) => {
+  const ids = req.body['ids[]'] || [];
+  const idsArray = Array.isArray(ids) ? ids : [ids];
+  
+  if (idsArray.length === 0) {
+    req.flash('error', 'Tidak ada tugas yang dipilih.');
+    return res.redirect('/admin/assignments');
+  }
+  
+  try {
+    const placeholders = idsArray.map((_, i) => `:id${i}`).join(',');
+    const params = {};
+    idsArray.forEach((id, i) => {
+      params[`id${i}`] = id;
+    });
+    
+    await pool.query(`DELETE FROM assignments WHERE id IN (${placeholders});`, params);
+    req.flash('success', `${idsArray.length} tugas berhasil dihapus.`);
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal menghapus tugas.');
+  }
+  
+  res.redirect('/admin/assignments');
+});
+
+// ===== QUESTION BANK MANAGEMENT =====
+
+// GET Admin Question Bank List
+router.get('/question-bank', async (req, res) => {
+  try {
+    const search = (req.query.search || '').trim();
+    const subject_id = req.query.subject_id || '';
+    const difficulty = req.query.difficulty || '';
+
+    // Get subjects for filter
+    const [subjects] = await pool.query(`SELECT id, name FROM subjects ORDER BY name ASC;`);
+
+    // Build WHERE clause
+    let whereConditions = ['1=1'];
+    let queryParams = {};
+
+    if (search) {
+      whereConditions.push(`(qb.question_text LIKE :search OR u.full_name LIKE :search)`);
+      queryParams.search = `%${search}%`;
+    }
+
+    if (subject_id) {
+      whereConditions.push(`qb.subject_id = :subject_id`);
+      queryParams.subject_id = subject_id;
+    }
+
+    if (difficulty) {
+      whereConditions.push(`qb.difficulty = :difficulty`);
+      queryParams.difficulty = difficulty;
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Get questions
+    const [questions] = await pool.query(
+      `SELECT 
+        qb.*,
+        u.full_name as teacher_name,
+        s.name as subject_name
+      FROM question_bank qb
+      JOIN users u ON qb.teacher_id = u.id
+      JOIN subjects s ON qb.subject_id = s.id
+      WHERE ${whereClause}
+      ORDER BY qb.created_at DESC;`,
+      queryParams
+    );
+
+    // Get stats
+    const [[statsRow]] = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN difficulty = 'EASY' THEN 1 ELSE 0 END) as easy,
+        SUM(CASE WHEN difficulty = 'MEDIUM' THEN 1 ELSE 0 END) as medium,
+        SUM(CASE WHEN difficulty = 'HARD' THEN 1 ELSE 0 END) as hard
+      FROM question_bank;
+    `);
+
+    const stats = {
+      total: statsRow.total || 0,
+      easy: statsRow.easy || 0,
+      medium: statsRow.medium || 0,
+      hard: statsRow.hard || 0
+    };
+
+    res.render('admin/question_bank', {
+      title: 'Manajemen Bank Soal',
+      questions,
+      subjects,
+      stats,
+      search,
+      subject_id,
+      difficulty
+    });
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal memuat data bank soal.');
+    res.redirect('/admin');
+  }
+});
+
+// POST Delete Question Bank
+router.post('/question-bank/:id/delete', async (req, res) => {
+  const questionId = req.params.id;
+  
+  try {
+    await pool.query(`DELETE FROM question_bank WHERE id = :id;`, { id: questionId });
+    req.flash('success', 'Soal berhasil dihapus.');
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal menghapus soal.');
+  }
+  
+  res.redirect('/admin/question-bank');
+});
+
+// POST Bulk Delete Question Bank
+router.post('/question-bank/bulk-delete', async (req, res) => {
+  const ids = req.body['ids[]'] || [];
+  const idsArray = Array.isArray(ids) ? ids : [ids];
+  
+  if (idsArray.length === 0) {
+    req.flash('error', 'Tidak ada soal yang dipilih.');
+    return res.redirect('/admin/question-bank');
+  }
+  
+  try {
+    const placeholders = idsArray.map((_, i) => `:id${i}`).join(',');
+    const params = {};
+    idsArray.forEach((id, i) => {
+      params[`id${i}`] = id;
+    });
+    
+    await pool.query(`DELETE FROM question_bank WHERE id IN (${placeholders});`, params);
+    req.flash('success', `${idsArray.length} soal berhasil dihapus.`);
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal menghapus soal.');
+  }
+  
+  res.redirect('/admin/question-bank');
+});

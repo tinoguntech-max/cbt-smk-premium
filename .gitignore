@@ -3,3 +3,16 @@ node_modules/
 vendor/
 storage/logs/
 .git
+
+# Backup files
+*.sql
+backup_*.sql
+
+# Upload files
+src/public/uploads/
+
+# Log files
+*.log
+
+# Kiro files
+.kiro/
