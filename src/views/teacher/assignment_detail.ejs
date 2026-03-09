@@ -1,0 +1,484 @@
+<div class="mb-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight"><%= assignment.title %></h1>
+      <p class="mt-1 text-slate-600">Detail tugas dan submission siswa.</p>
+    </div>
+    <a href="/teacher/assignments" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-lg transition-colors">
+      Kembali
+    </a>
+  </div>
+</div>
+
+<!-- Assignment Info -->
+<div class="bg-white rounded-xl shadow-soft border border-slate-200 p-6 mb-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div>
+      <div class="text-sm text-slate-600 mb-1">Mata Pelajaran</div>
+      <div class="font-semibold text-slate-900"><%= assignment.subject_name || '-' %></div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-600 mb-1">Kelas</div>
+      <div class="font-semibold text-slate-900"><%= assignment.class_name || 'Semua Kelas' %></div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-600 mb-1">Deadline</div>
+      <div class="font-semibold text-slate-900">
+        <% if (assignment.due_date) { %>
+          <%= new Date(assignment.due_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+        <% } else { %>
+          Tidak ada
+        <% } %>
+      </div>
+    </div>
+    <div>
+      <div class="text-sm text-slate-600 mb-1">Nilai Maksimal</div>
+      <div class="font-semibold text-slate-900"><%= assignment.max_score %></div>
+    </div>
+  </div>
+  
+  <% if (assignment.description) { %>
+    <div class="mt-6 pt-6 border-t border-slate-200">
+      <div class="text-sm text-slate-600 mb-2">Deskripsi / Instruksi:</div>
+      <div class="text-slate-900 whitespace-pre-wrap"><%= assignment.description %></div>
+    </div>
+  <% } %>
+  
+  <div class="mt-6 pt-6 border-t border-slate-200 flex items-center gap-4">
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-slate-600">Status:</span>
+      <% if (assignment.is_published) { %>
+        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          Dipublikasi
+        </span>
+      <% } else { %>
+        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+          Draft
+        </span>
+      <% } %>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-slate-600">Pengumpulan Terlambat:</span>
+      <span class="text-sm font-medium <%= assignment.allow_late_submission ? 'text-green-600' : 'text-red-600' %>">
+        <%= assignment.allow_late_submission ? 'Diizinkan' : 'Tidak Diizinkan' %>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- Submissions -->
+<div class="bg-white rounded-xl shadow-soft border border-slate-200 overflow-hidden">
+  <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+    <h2 class="text-lg font-semibold text-slate-900">
+      Submission Siswa (<%= submissions.length %>)
+    </h2>
+  </div>
+  
+  <% if (submissions.length === 0) { %>
+    <div class="p-12 text-center">
+      <div class="text-6xl mb-4">📭</div>
+      <h3 class="text-xl font-semibold text-slate-700 mb-2">Belum Ada Submission</h3>
+      <p class="text-slate-500">Siswa belum mengumpulkan tugas ini.</p>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-slate-50 border-b border-slate-200">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Siswa</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Kelas</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">File</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Waktu Submit</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Nilai</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Aksi</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          <% submissions.forEach(sub => { %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-3">
+                <div class="font-medium text-slate-900"><%= sub.student_name %></div>
+                <div class="text-sm text-slate-500"><%= sub.student_username %></div>
+              </td>
+              <td class="px-4 py-3 text-sm text-slate-700">
+                <%= sub.class_name || '-' %>
+              </td>
+              <td class="px-4 py-3">
+                <% if (sub.file_path) { %>
+                  <a href="/public/uploads/assignments/<%= sub.file_path.split('/').pop() %>" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <%= sub.file_name || 'Download' %>
+                  </a>
+                <% } else { %>
+                  <span class="text-slate-400 text-sm">-</span>
+                <% } %>
+              </td>
+              <td class="px-4 py-3 text-sm text-slate-700">
+                <%= new Date(sub.submitted_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+                <% if (assignment.due_date && new Date(sub.submitted_at) > new Date(assignment.due_date)) { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 ml-2">
+                    Terlambat
+                  </span>
+                <% } %>
+              </td>
+              <td class="px-4 py-3">
+                <% if (sub.score !== null) { %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
+                    <%= sub.score %> / <%= assignment.max_score %>
+                  </span>
+                <% } else { %>
+                  <span class="text-slate-400 text-sm">Belum dinilai</span>
+                <% } %>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex gap-2">
+                  <!-- View/Preview Button -->
+                  <button 
+                    onclick="viewSubmission(<%= sub.id %>, '<%= sub.student_name %>', '<%= sub.file_path %>', '<%= sub.file_name %>', '<%= (sub.notes || '').replace(/'/g, "\\'").replace(/\n/g, '\\n') %>')"
+                    class="px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                  >
+                    👁️ Lihat
+                  </button>
+                  
+                  <!-- Grade Button -->
+                  <button 
+                    onclick="openGradeModal(<%= sub.id %>, '<%= sub.student_name %>', <%= sub.score || 'null' %>, '<%= (sub.feedback || '').replace(/'/g, "\\'").replace(/\n/g, '\\n') %>')"
+                    class="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                  >
+                    <%= sub.score !== null ? '✏️ Edit' : '📝 Nilai' %>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<!-- Grade Modal -->
+<div id="gradeModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl max-w-md w-full">
+    <div class="p-6 border-b border-slate-200">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-slate-900">Beri Nilai</h2>
+        <button onclick="closeGradeModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <form id="gradeForm" method="POST" action="">
+      <div class="p-6 space-y-4">
+        <div>
+          <div class="text-sm text-slate-600 mb-2">Siswa:</div>
+          <div id="studentName" class="font-semibold text-slate-900"></div>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">
+            Nilai (0 - <%= assignment.max_score %>)
+          </label>
+          <input 
+            type="number" 
+            name="score" 
+            id="scoreInput"
+            min="0"
+            max="<%= assignment.max_score %>"
+            class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            required
+          />
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">
+            Feedback / Catatan
+          </label>
+          <textarea 
+            name="feedback" 
+            id="feedbackInput"
+            rows="4"
+            class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Berikan feedback untuk siswa..."
+          ></textarea>
+        </div>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-slate-200 flex gap-3">
+        <button 
+          type="submit"
+          class="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
+        >
+          Simpan Nilai
+        </button>
+        <button 
+          type="button"
+          onclick="closeGradeModal()"
+          class="px-4 py-2 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- View Submission Modal -->
+<div id="viewModal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+    <!-- Header -->
+    <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-semibold text-slate-900">Tugas Siswa</h2>
+        <p id="viewStudentName" class="text-sm text-slate-600 mt-1"></p>
+      </div>
+      <div class="flex gap-2">
+        <a id="downloadLink" href="" download class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105">
+          📥 Download
+        </a>
+        <button onclick="closeViewModal()" class="px-4 py-2 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-105">
+          ✕ Tutup
+        </button>
+      </div>
+    </div>
+    
+    <!-- Content -->
+    <div class="flex-1 overflow-auto p-6">
+      <!-- Student Notes -->
+      <div id="studentNotesSection" class="hidden mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="text-sm font-semibold text-blue-900 mb-2">Catatan Siswa:</div>
+        <div id="studentNotes" class="text-blue-800 whitespace-pre-wrap"></div>
+      </div>
+      
+      <!-- File Preview -->
+      <div id="filePreview" class="bg-slate-50 rounded-lg border-2 border-dashed border-slate-300 min-h-[400px] flex items-center justify-center">
+        <div class="text-center">
+          <div class="text-6xl mb-4">📄</div>
+          <p class="text-slate-600">Memuat preview...</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Footer with Grade Button -->
+    <div class="p-6 border-t border-slate-200 flex justify-between items-center">
+      <div id="viewFileName" class="text-sm text-slate-600"></div>
+      <button 
+        id="gradeFromViewBtn"
+        onclick="gradeFromView()"
+        class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
+      >
+        📝 Beri Nilai
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentSubmissionId = null;
+let currentStudentName = null;
+let currentScore = null;
+let currentFeedback = null;
+
+function openGradeModal(submissionId, studentName, score, feedback) {
+  const modal = document.getElementById('gradeModal');
+  const form = document.getElementById('gradeForm');
+  const studentNameEl = document.getElementById('studentName');
+  const scoreInput = document.getElementById('scoreInput');
+  const feedbackInput = document.getElementById('feedbackInput');
+  
+  form.action = `/teacher/assignments/<%= assignment.id %>/submissions/${submissionId}/grade`;
+  studentNameEl.textContent = studentName;
+  scoreInput.value = score !== null ? score : '';
+  feedbackInput.value = feedback || '';
+  
+  modal.classList.remove('hidden');
+}
+
+function closeGradeModal() {
+  document.getElementById('gradeModal').classList.add('hidden');
+}
+
+function viewSubmission(submissionId, studentName, filePath, fileName, notes) {
+  currentSubmissionId = submissionId;
+  currentStudentName = studentName;
+  
+  const modal = document.getElementById('viewModal');
+  const studentNameEl = document.getElementById('viewStudentName');
+  const fileNameEl = document.getElementById('viewFileName');
+  const previewEl = document.getElementById('filePreview');
+  const downloadLink = document.getElementById('downloadLink');
+  const notesSection = document.getElementById('studentNotesSection');
+  const notesEl = document.getElementById('studentNotes');
+  
+  // Set student name and file name
+  studentNameEl.textContent = studentName;
+  fileNameEl.textContent = fileName;
+  
+  // Set download link
+  const fileUrl = `/public/uploads/assignments/${filePath.split('/').pop()}`;
+  downloadLink.href = fileUrl;
+  downloadLink.download = fileName;
+  
+  // Show/hide notes
+  if (notes && notes.trim()) {
+    notesEl.textContent = notes;
+    notesSection.classList.remove('hidden');
+  } else {
+    notesSection.classList.add('hidden');
+  }
+  
+  // Show modal
+  modal.classList.remove('hidden');
+  
+  // Load preview
+  loadFilePreview(fileUrl, fileName, previewEl);
+}
+
+function loadFilePreview(fileUrl, fileName, previewEl) {
+  const ext = fileName.split('.').pop().toLowerCase();
+  
+  // Image files
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
+    previewEl.innerHTML = `
+      <img src="${fileUrl}" alt="${fileName}" class="max-w-full max-h-[600px] mx-auto rounded-lg shadow-lg" />
+    `;
+  }
+  // PDF files
+  else if (ext === 'pdf') {
+    previewEl.innerHTML = `
+      <iframe src="${fileUrl}" class="w-full h-[600px] rounded-lg border-0"></iframe>
+    `;
+  }
+  // Video files
+  else if (['mp4', 'webm', 'ogg'].includes(ext)) {
+    previewEl.innerHTML = `
+      <video controls class="max-w-full max-h-[600px] mx-auto rounded-lg shadow-lg">
+        <source src="${fileUrl}" type="video/${ext}">
+        Browser Anda tidak mendukung video player.
+      </video>
+    `;
+  }
+  // Audio files
+  else if (['mp3', 'wav', 'ogg'].includes(ext)) {
+    previewEl.innerHTML = `
+      <div class="text-center p-12">
+        <div class="text-6xl mb-4">🎵</div>
+        <p class="text-slate-700 font-medium mb-4">${fileName}</p>
+        <audio controls class="mx-auto">
+          <source src="${fileUrl}" type="audio/${ext}">
+          Browser Anda tidak mendukung audio player.
+        </audio>
+      </div>
+    `;
+  }
+  // Text files
+  else if (['txt', 'md', 'json', 'xml', 'csv'].includes(ext)) {
+    fetch(fileUrl)
+      .then(response => response.text())
+      .then(text => {
+        previewEl.innerHTML = `
+          <div class="bg-white p-6 rounded-lg border border-slate-300 max-h-[600px] overflow-auto">
+            <pre class="text-sm text-slate-800 whitespace-pre-wrap font-mono">${escapeHtml(text)}</pre>
+          </div>
+        `;
+      })
+      .catch(() => {
+        showDownloadOnly(fileName, fileUrl, previewEl);
+      });
+  }
+  // Office documents (Word, Excel, PowerPoint)
+  else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+    previewEl.innerHTML = `
+      <div class="text-center p-12">
+        <div class="text-6xl mb-4">📄</div>
+        <p class="text-slate-700 font-medium mb-2">${fileName}</p>
+        <p class="text-slate-500 text-sm mb-6">Preview tidak tersedia untuk file Office.</p>
+        <a href="${fileUrl}" download class="inline-block px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+          📥 Download untuk Melihat
+        </a>
+      </div>
+    `;
+  }
+  // Other files
+  else {
+    showDownloadOnly(fileName, fileUrl, previewEl);
+  }
+}
+
+function showDownloadOnly(fileName, fileUrl, previewEl) {
+  const icon = getFileIcon(fileName);
+  previewEl.innerHTML = `
+    <div class="text-center p-12">
+      <div class="text-6xl mb-4">${icon}</div>
+      <p class="text-slate-700 font-medium mb-2">${fileName}</p>
+      <p class="text-slate-500 text-sm mb-6">Preview tidak tersedia untuk tipe file ini.</p>
+      <a href="${fileUrl}" download class="inline-block px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+        📥 Download File
+      </a>
+    </div>
+  `;
+}
+
+function getFileIcon(fileName) {
+  const ext = fileName.split('.').pop().toLowerCase();
+  const icons = {
+    'zip': '🗜️', 'rar': '🗜️', '7z': '🗜️',
+    'doc': '📝', 'docx': '📝',
+    'xls': '📊', 'xlsx': '📊',
+    'ppt': '📊', 'pptx': '📊',
+    'pdf': '📄',
+    'txt': '📄',
+    'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+    'mp4': '🎬', 'avi': '🎬', 'mov': '🎬',
+    'mp3': '🎵', 'wav': '🎵',
+  };
+  return icons[ext] || '📎';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function closeViewModal() {
+  document.getElementById('viewModal').classList.add('hidden');
+}
+
+function gradeFromView() {
+  // Close view modal
+  closeViewModal();
+  
+  // Open grade modal with current submission
+  // We need to get the score and feedback from the table
+  const row = document.querySelector(`button[onclick*="openGradeModal(${currentSubmissionId}"]`);
+  if (row) {
+    row.click();
+  }
+}
+
+// Close modals when clicking outside
+document.getElementById('gradeModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeGradeModal();
+  }
+});
+
+document.getElementById('viewModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeViewModal();
+  }
+});
+
+// Close modals with Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeGradeModal();
+    closeViewModal();
+  }
+});
+</script>

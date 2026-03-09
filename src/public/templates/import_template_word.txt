@@ -1,0 +1,33 @@
+TEMPLATE FORMAT IMPORT WORD (DOCX)
+
+Catatan penting:
+- Gunakan penomoran: "1." untuk soal (atau "1)")
+- Opsi harus A sampai E: "A." (atau "A)")
+- Kunci wajib: "KUNCI: <A-E>"
+- Nilai/poin opsional: "NILAI: <angka>" (default 1)
+- Gambar boleh disisipkan tepat di bawah paragraf soal (atau di paragraf berikutnya).
+  Sistem akan mengambil gambar pertama yang ditemukan untuk soal tersebut.
+
+CONTOH:
+
+1. Apa fungsi CPU?
+A. Menyimpan data
+B. Mengolah data
+C. Menampilkan data
+D. Mengirim data
+E. Mencetak data
+KUNCI: B
+NILAI: 1
+
+2. Perangkat yang digunakan untuk menghubungkan komputer ke jaringan adalah...
+A. CPU
+B. Mouse
+C. Keyboard
+D. Router
+E. Monitor
+KUNCI: D
+NILAI: 2
+
+Tips penulisan:
+- Boleh menambah paragraf penjelasan soal setelah kalimat soal; sistem akan menggabungkannya.
+- Jangan menuliskan opsi dengan format tabel/kolom; pakai baris per opsi.

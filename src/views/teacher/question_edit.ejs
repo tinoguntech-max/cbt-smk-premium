@@ -1,0 +1,214 @@
+<div class="flex items-center justify-between gap-4">
+  <div>
+    <div class="text-sm text-slate-500">Edit Soal</div>
+    <h1 class="text-3xl font-semibold tracking-tight"><%= exam.title %></h1>
+    <p class="mt-1 text-slate-600">Perbarui teks soal, gambar, poin, dan kunci jawaban (A–E).</p>
+  </div>
+  <a href="/teacher/exams/<%= exam.id %>" class="text-sm px-4 py-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-100 hover:from-rose-100 hover:to-pink-200 text-rose-800 font-medium transition-all">Kembali</a>
+</div>
+
+<form action="/teacher/questions/<%= question.id %>?_method=PUT" method="POST" enctype="multipart/form-data" class="mt-6 rounded-2xl border border-slate-200 bg-slate-100 p-5 space-y-4" id="editQuestionForm">
+  <div>
+    <label class="text-sm text-slate-600 font-medium">Pertanyaan</label>
+    <div id="question_editor" contenteditable="true" class="mt-1 w-full min-h-[150px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 400px;"><%- question.question_text %></div>
+    <div class="mt-1 text-xs text-slate-500">Tekan Ctrl+V untuk paste gambar dari clipboard</div>
+    <input type="hidden" name="question_text" id="question_text_input" required />
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Poin</label>
+      <input type="number" name="points" value="<%= question.points %>" min="1" class="mt-1 w-full rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Jawaban Benar</label>
+      <select name="correct" required class="mt-1 w-full rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <% ;['A','B','C','D','E'].forEach((lbl)=>{ %>
+          <option value="<%= lbl %>" <%= correct_label===lbl ? 'selected' : '' %>><%= lbl %></option>
+        <% }) %>
+      </select>
+    </div>
+  </div>
+
+  <div>
+    <label class="text-sm text-slate-600 font-medium">Gambar Soal (opsional)</label>
+    <% if (question.question_image) { %>
+      <div class="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+        <div class="text-xs text-slate-500">Gambar saat ini:</div>
+        <img src="<%= question.question_image %>" alt="gambar_soal" class="mt-2 max-h-56 rounded-xl border border-slate-200" />
+        <label class="mt-3 inline-flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" name="remove_image" value="1" class="accent-indigo-500" />
+          Hapus gambar (set kosong)
+        </label>
+      </div>
+    <% } %>
+    <input type="file" name="image" accept="image/*" class="mt-2 w-full rounded-xl bg-white border border-slate-200 px-4 py-3" />
+    <div class="mt-1 text-xs text-slate-500">Upload gambar baru jika ingin mengganti. Max 5MB.</div>
+  </div>
+
+  <div>
+    <label class="text-sm text-slate-600 font-medium">PDF Soal (opsional)</label>
+    <% if (question.question_pdf) { %>
+      <div class="mt-2 rounded-xl border border-purple-200 bg-purple-50 p-3">
+        <div class="text-xs text-purple-700 font-medium mb-2">📄 PDF saat ini:</div>
+        <iframe src="<%= question.question_pdf %>" class="w-full h-64 rounded-xl border border-purple-200 bg-white" frameborder="0"></iframe>
+        <label class="mt-3 inline-flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" name="remove_pdf" value="1" class="accent-purple-500" />
+          Hapus PDF (set kosong)
+        </label>
+      </div>
+    <% } %>
+    <input type="file" name="pdf" accept="application/pdf" class="mt-2 w-full rounded-xl bg-white border border-slate-200 px-4 py-3 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" />
+    <div class="mt-1 text-xs text-slate-500">Upload PDF baru jika ingin mengganti. Max 10MB.</div>
+  </div>
+
+  <div class="space-y-3">
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Opsi A</label>
+      <div id="option_a_editor" contenteditable="true" class="mt-1 w-full min-h-[80px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 300px;"><%- options.A || '' %></div>
+      <input type="hidden" name="a" id="option_a_input" required />
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Opsi B</label>
+      <div id="option_b_editor" contenteditable="true" class="mt-1 w-full min-h-[80px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 300px;"><%- options.B || '' %></div>
+      <input type="hidden" name="b" id="option_b_input" required />
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Opsi C</label>
+      <div id="option_c_editor" contenteditable="true" class="mt-1 w-full min-h-[80px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 300px;"><%- options.C || '' %></div>
+      <input type="hidden" name="c" id="option_c_input" required />
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Opsi D</label>
+      <div id="option_d_editor" contenteditable="true" class="mt-1 w-full min-h-[80px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 300px;"><%- options.D || '' %></div>
+      <input type="hidden" name="d" id="option_d_input" required />
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 font-medium">Opsi E</label>
+      <div id="option_e_editor" contenteditable="true" class="mt-1 w-full min-h-[80px] rounded-xl bg-white border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-auto" style="max-height: 300px;"><%- options.E || '' %></div>
+      <input type="hidden" name="e" id="option_e_input" required />
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-3">
+    <button type="submit" class="flex-1 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-semibold py-3">Simpan Perubahan</button>
+    <a href="/teacher/exams/<%= exam.id %>" class="flex-1 text-center rounded-xl border border-slate-200 hover:bg-slate-100 py-3">Batal</a>
+  </div>
+</form>
+
+<script>
+  // Setup paste image handler for all contenteditable divs
+  const editors = [
+    'question_editor',
+    'option_a_editor',
+    'option_b_editor',
+    'option_c_editor',
+    'option_d_editor',
+    'option_e_editor'
+  ];
+
+  editors.forEach(editorId => {
+    const editor = document.getElementById(editorId);
+    
+    // Handle paste event
+    editor.addEventListener('paste', function(e) {
+      e.preventDefault();
+      
+      const items = e.clipboardData.items;
+      let hasImage = false;
+      
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          hasImage = true;
+          const blob = items[i].getAsFile();
+          const reader = new FileReader();
+          
+          reader.onload = function(event) {
+            const img = document.createElement('img');
+            img.src = event.target.result;
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.margin = '10px 0';
+            img.style.borderRadius = '8px';
+            img.style.border = '2px solid #e0e7ff';
+            
+            // Insert image at cursor position
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              range.deleteContents();
+              range.insertNode(img);
+              
+              // Move cursor after image
+              range.setStartAfter(img);
+              range.setEndAfter(img);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            } else {
+              editor.appendChild(img);
+            }
+          };
+          
+          reader.readAsDataURL(blob);
+        }
+      }
+      
+      // If no image, paste text normally
+      if (!hasImage) {
+        const text = e.clipboardData.getData('text/plain');
+        document.execCommand('insertText', false, text);
+      }
+    });
+  });
+
+  // Form submit handler
+  document.getElementById('editQuestionForm').addEventListener('submit', function(e) {
+    // Copy content from contenteditable to hidden inputs
+    document.getElementById('question_text_input').value = document.getElementById('question_editor').innerHTML;
+    document.getElementById('option_a_input').value = document.getElementById('option_a_editor').innerHTML;
+    document.getElementById('option_b_input').value = document.getElementById('option_b_editor').innerHTML;
+    document.getElementById('option_c_input').value = document.getElementById('option_c_editor').innerHTML;
+    document.getElementById('option_d_input').value = document.getElementById('option_d_editor').innerHTML;
+    document.getElementById('option_e_input').value = document.getElementById('option_e_editor').innerHTML;
+
+    // Validate that fields are not empty
+    const fields = [
+      { id: 'question_editor', name: 'Pertanyaan' },
+      { id: 'option_a_editor', name: 'Opsi A' },
+      { id: 'option_b_editor', name: 'Opsi B' },
+      { id: 'option_c_editor', name: 'Opsi C' },
+      { id: 'option_d_editor', name: 'Opsi D' },
+      { id: 'option_e_editor', name: 'Opsi E' }
+    ];
+
+    for (const field of fields) {
+      const editor = document.getElementById(field.id);
+      const text = editor.textContent.trim();
+      const images = editor.querySelectorAll('img');
+      
+      if (text === '' && images.length === 0) {
+        e.preventDefault();
+        alert(`${field.name} tidak boleh kosong!`);
+        editor.focus();
+        return false;
+      }
+    }
+
+    return true;
+  });
+</script>
+
+<style>
+  [contenteditable] {
+    outline: none;
+  }
+  
+  [contenteditable] img {
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  
+  [contenteditable] img:hover {
+    transform: scale(1.02);
+  }
+</style>

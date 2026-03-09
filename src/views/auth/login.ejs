@@ -1,0 +1,65 @@
+<div class="grid lg:grid-cols-2 gap-8 items-center">
+  <!-- Hero Section - Hidden on Mobile -->
+  <div class="space-y-6 hidden lg:block">
+    <div>
+      <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Masuk ke <span class="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">LMS SMKN 1 Kras</span></h1>
+      <p class="mt-2 text-slate-600">Tampilan elegan, responsif, dan nyaman untuk ujian online SMK.</p>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-5 shadow-soft">
+        <div class="flex items-center gap-3">
+          <div class="text-3xl">🎓</div>
+          <div>
+            <div class="font-semibold text-blue-900">Sistem Ujian Online</div>
+            <div class="text-sm text-blue-700">Mudah, cepat, dan aman</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 p-5 shadow-soft">
+        <div class="flex items-center gap-3">
+          <div class="text-3xl">📚</div>
+          <div>
+            <div class="font-semibold text-purple-900">Materi Pembelajaran</div>
+            <div class="text-sm text-purple-700">Akses materi kapan saja</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-teal-100 p-5 shadow-soft">
+        <div class="flex items-center gap-3">
+          <div class="text-3xl">📊</div>
+          <div>
+            <div class="font-semibold text-teal-900">Laporan Lengkap</div>
+            <div class="text-sm text-teal-700">Pantau perkembangan belajar</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-3xl border-2 border-indigo-200 bg-gradient-to-br from-white to-indigo-50 p-8 shadow-xl">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center mb-3">
+        <img src="/public/images/logo.png" alt="Logo SMKN 1 Kras" class="w-20 h-20 object-contain drop-shadow-lg" />
+      </div>
+      <h2 class="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Selamat Datang</h2>
+      <p class="text-sm text-slate-600 mt-1">Masuk untuk melanjutkan</p>
+    </div>
+
+    <form action="/login" method="POST" class="space-y-4">
+      <div>
+        <label class="text-sm font-medium text-slate-700">Username</label>
+        <input name="username" required class="mt-1 w-full rounded-xl bg-white border-2 border-indigo-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" placeholder="mis: admin" />
+      </div>
+      <div>
+        <label class="text-sm font-medium text-slate-700">Password</label>
+        <input type="password" name="password" required class="mt-1 w-full rounded-xl bg-white border-2 border-indigo-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" placeholder="••••••••" />
+      </div>
+      <button class="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02]">
+        Masuk
+      </button>
+    </form>
+  </div>
+</div>
