@@ -4,6 +4,12 @@
     <p class="mt-1 text-slate-600">Buat admin/guru/siswa, reset password, aktif/nonaktif.</p>
   </div>
   <div class="flex gap-2">
+    <a href="/admin/users/print-cards" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-semibold transition-all shadow-md flex items-center gap-2">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+      </svg>
+      Cetak Kartu
+    </a>
     <a href="/admin/users/download" class="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold transition-all shadow-md flex items-center gap-2">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -20,54 +26,28 @@
 </div>
 
 <div class="mt-6 space-y-4">
-  <!-- Card Tambah Pengguna -->
-  <div class="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100 p-5">
-    <h2 class="text-lg font-semibold text-indigo-900">Tambah Pengguna</h2>
-    <form action="/admin/users" method="POST" class="mt-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3">
-      <div>
-        <label class="text-sm text-indigo-700 font-medium">Username</label>
-        <input name="username" required class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-      </div>
-      <div>
-        <label class="text-sm text-indigo-700 font-medium">Nama Lengkap</label>
-        <input name="full_name" required class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-      </div>
-      <div>
-        <label class="text-sm text-indigo-700 font-medium">Role</label>
-        <select name="role" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="STUDENT">STUDENT</option>
-          <option value="TEACHER">TEACHER</option>
-          <option value="PRINCIPAL">PRINCIPAL</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
-      </div>
-      <div>
-        <label class="text-sm text-indigo-700 font-medium">Kelas (siswa)</label>
-        <select name="class_id" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="">-</option>
-          <% classes.forEach(c => { %>
-            <option value="<%= c.id %>"><%= c.name %></option>
-          <% }) %>
-        </select>
-      </div>
-      <div>
-        <label class="text-sm text-indigo-700 font-medium">Password</label>
-        <input name="password" placeholder="(kosong = 123456)" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-      </div>
-      <div class="flex items-end">
-        <button class="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
-          Simpan
-        </button>
-      </div>
-    </form>
-  </div>
-
   <!-- Card Daftar Pengguna -->
   <div class="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-teal-100 p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-teal-900">Daftar Pengguna</h2>
       <div class="flex items-center gap-4">
         <div id="bulkActionBar" class="hidden flex items-center gap-2">
+          <!-- Bulk Download Excel -->
+          <button type="button" onclick="downloadSelectedExcel()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download Excel
+          </button>
+          
+          <!-- Bulk Print Cards -->
+          <button type="button" onclick="printSelectedCards()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-semibold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Cetak Kartu
+          </button>
+          
           <!-- Bulk Delete -->
           <form action="/admin/users/bulk-delete" method="POST" onsubmit="return confirmBulkDelete()" class="inline">
             <button type="submit" class="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white font-semibold transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-2">
@@ -246,6 +226,48 @@
       </div>
     <% } %>
   </div>
+
+  <!-- Card Tambah Pengguna -->
+  <div class="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100 p-5">
+    <h2 class="text-lg font-semibold text-indigo-900">Tambah Pengguna</h2>
+    <form action="/admin/users" method="POST" class="mt-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Username</label>
+        <input name="username" required class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Nama Lengkap</label>
+        <input name="full_name" required class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Role</label>
+        <select name="role" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="STUDENT">STUDENT</option>
+          <option value="TEACHER">TEACHER</option>
+          <option value="PRINCIPAL">PRINCIPAL</option>
+          <option value="ADMIN">ADMIN</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Kelas (siswa)</label>
+        <select name="class_id" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">-</option>
+          <% classes.forEach(c => { %>
+            <option value="<%= c.id %>"><%= c.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Password</label>
+        <input name="password" placeholder="(kosong = 123456)" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div class="flex items-end">
+        <button class="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+          Simpan
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Modal Edit Pengguna (tanpa pindah halaman) -->
@@ -413,6 +435,36 @@
       
       document.body.appendChild(form);
       form.submit();
+    };
+    
+    // Print selected cards functionality
+    window.printSelectedCards = function() {
+      const selectedIds = Array.from(userCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.getAttribute('data-user-id'));
+      
+      if (selectedIds.length === 0) {
+        alert('Pilih pengguna yang ingin dicetak kartunya terlebih dahulu.');
+        return;
+      }
+      
+      // Open print page with selected IDs
+      window.open(`/admin/users/print-cards?ids=${selectedIds.join(',')}`, '_blank');
+    };
+    
+    // Download selected excel functionality
+    window.downloadSelectedExcel = function() {
+      const selectedIds = Array.from(userCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.getAttribute('data-user-id'));
+      
+      if (selectedIds.length === 0) {
+        alert('Pilih pengguna yang ingin didownload terlebih dahulu.');
+        return;
+      }
+      
+      // Download excel with selected IDs
+      window.location.href = `/admin/users/download?ids=${selectedIds.join(',')}`;
     };
   })();
 

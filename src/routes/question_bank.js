@@ -91,7 +91,7 @@ router.get('/new', async (req, res) => {
 // POST /question-bank - Simpan soal ke bank
 router.post('/', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'pdf', maxCount: 1 }]), async (req, res) => {
   const user = req.session.user;
-  const { subject_id, question_text, points, difficulty, tags, a, b, c, d, e, correct } = req.body;
+  const { subject_id, chapter, question_text, points, difficulty, tags, a, b, c, d, e, correct } = req.body;
   
   if (!subject_id || !question_text || !a || !b || !c || !d || !e || !correct) {
     req.flash('error', 'Semua field wajib diisi');
@@ -106,11 +106,12 @@ router.post('/', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'pdf', m
     const pdfFile = req.files && req.files.pdf ? req.files.pdf[0] : null;
     
     const [result] = await conn.query(
-      `INSERT INTO question_bank (teacher_id, subject_id, question_text, question_image, question_pdf, points, difficulty, tags)
-       VALUES (:tid, :sid, :qt, :img, :pdf, :pts, :diff, :tags);`,
+      `INSERT INTO question_bank (teacher_id, subject_id, chapter, question_text, question_image, question_pdf, points, difficulty, tags)
+       VALUES (:tid, :sid, :chap, :qt, :img, :pdf, :pts, :diff, :tags);`,
       {
         tid: user.id,
         sid: subject_id,
+        chap: chapter || null,
         qt: question_text,
         img: imageFile ? `/public/uploads/questions/${path.basename(imageFile.filename)}` : null,
         pdf: pdfFile ? `/public/uploads/questions/${path.basename(pdfFile.filename)}` : null,
@@ -252,7 +253,7 @@ router.get('/:id/edit', async (req, res) => {
 // PUT /question-bank/:id - Update bank soal
 router.put('/:id', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'pdf', maxCount: 1 }]), async (req, res) => {
   const user = req.session.user;
-  const { subject_id, question_text, points, difficulty, tags, a, b, c, d, e, correct, remove_image, remove_pdf } = req.body;
+  const { subject_id, chapter, question_text, points, difficulty, tags, a, b, c, d, e, correct, remove_image, remove_pdf } = req.body;
   
   if (!subject_id || !question_text || !a || !b || !c || !d || !e || !correct) {
     req.flash('error', 'Semua field wajib diisi');
@@ -287,11 +288,12 @@ router.put('/:id', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'pdf',
     
     await conn.query(
       `UPDATE question_bank
-       SET subject_id = :sid, question_text = :qt, question_image = :img, question_pdf = :pdf,
+       SET subject_id = :sid, chapter = :chap, question_text = :qt, question_image = :img, question_pdf = :pdf,
            points = :pts, difficulty = :diff, tags = :tags
        WHERE id = :id;`,
       {
         sid: subject_id,
+        chap: chapter || null,
         qt: question_text,
         img: imageToSave,
         pdf: pdfToSave,

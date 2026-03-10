@@ -18,103 +18,6 @@
   </div>
 </div>
 
-<!-- Filter Section -->
-<div class="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-lg border-2 border-indigo-100 p-6 mb-6">
-  <div class="flex items-center gap-3 mb-4">
-    <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-2">
-      <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-      </svg>
-    </div>
-    <h2 class="text-lg font-bold text-slate-800">Filter & Pencarian</h2>
-  </div>
-  
-  <form method="GET" action="/admin/exams" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-2">Cari</label>
-      <input 
-        type="text" 
-        name="search" 
-        value="<%= filters.search %>" 
-        placeholder="Judul atau deskripsi..."
-        class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-      />
-    </div>
-    
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-2">Mata Pelajaran</label>
-      <select 
-        name="subject" 
-        class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
-      >
-        <option value="">Semua Mapel</option>
-        <% subjects.forEach(s => { %>
-          <option value="<%= s.id %>" <%= filters.subject == s.id ? 'selected' : '' %>>
-            <%= s.code %> - <%= s.name %>
-          </option>
-        <% }); %>
-      </select>
-    </div>
-
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-2">Guru</label>
-      <select 
-        name="teacher" 
-        class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all"
-      >
-        <option value="">Semua Guru</option>
-        <% teachers.forEach(t => { %>
-          <option value="<%= t.id %>" <%= filters.teacher == t.id ? 'selected' : '' %>>
-            <%= t.full_name %>
-          </option>
-        <% }); %>
-      </select>
-    </div>
-
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-2">Kelas</label>
-      <select 
-        name="class" 
-        class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
-      >
-        <option value="">Semua Kelas</option>
-        <% classes.forEach(c => { %>
-          <option value="<%= c.id %>" <%= filters.class == c.id ? 'selected' : '' %>>
-            <%= c.name %>
-          </option>
-        <% }); %>
-      </select>
-    </div>
-
-    <div>
-      <label class="block text-sm font-semibold text-slate-700 mb-2">Status</label>
-      <select 
-        name="status" 
-        class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-      >
-        <option value="">Semua Status</option>
-        <option value="published" <%= filters.status === 'published' ? 'selected' : '' %>>Dipublikasi</option>
-        <option value="draft" <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
-      </select>
-    </div>
-
-    <div class="md:col-span-2 lg:col-span-5 flex gap-3">
-      <button 
-        type="submit" 
-        class="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200"
-      >
-        Filter
-      </button>
-      <a 
-        href="/admin/exams" 
-        class="px-6 py-2.5 bg-gradient-to-r from-slate-200 to-slate-300 hover:from-slate-300 hover:to-slate-400 text-slate-700 font-semibold rounded-xl shadow-md transform hover:scale-105 transition-all duration-200"
-      >
-        Reset
-      </a>
-    </div>
-  </form>
-</div>
-
 <!-- Stats Cards -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
   <!-- Total Ujian Card -->
@@ -200,17 +103,127 @@
   </div>
 </div>
 
-<!-- Exams Table -->
+<!-- Exams Table with Integrated Filter -->
 <div class="bg-white rounded-2xl shadow-xl border-2 border-slate-100 overflow-hidden">
+  <!-- Header with Filter & Pencarian -->
   <div class="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 border-b-2 border-slate-200">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg p-2">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-2">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+        </svg>
+      </div>
+      <h2 class="text-lg font-bold text-slate-800">Daftar Ujian</h2>
+    </div>
+    
+    <!-- Filter Form -->
+    <form method="GET" action="/admin/exams" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+        <div class="lg:col-span-2">
+          <input 
+            type="text" 
+            name="search" 
+            value="<%= filters.search %>" 
+            placeholder="Cari judul atau deskripsi..."
+            class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+          />
         </div>
-        <h2 class="text-lg font-bold text-slate-800">Daftar Ujian</h2>
+        
+        <div>
+          <select 
+            name="subject" 
+            class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-sm"
+          >
+            <option value="">Semua Mapel</option>
+            <% subjects.forEach(s => { %>
+              <option value="<%= s.id %>" <%= filters.subject == s.id ? 'selected' : '' %>>
+                <%= s.code %>
+              </option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div>
+          <select 
+            name="teacher" 
+            class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-all text-sm"
+          >
+            <option value="">Semua Guru</option>
+            <% teachers.forEach(t => { %>
+              <option value="<%= t.id %>" <%= filters.teacher == t.id ? 'selected' : '' %>>
+                <%= t.full_name %>
+              </option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div>
+          <select 
+            name="class" 
+            class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all text-sm"
+          >
+            <option value="">Semua Kelas</option>
+            <% classes.forEach(c => { %>
+              <option value="<%= c.id %>" <%= filters.class == c.id ? 'selected' : '' %>>
+                <%= c.name %>
+              </option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div>
+          <select 
+            name="status" 
+            class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-sm"
+          >
+            <option value="">Semua Status</option>
+            <option value="published" <%= filters.status === 'published' ? 'selected' : '' %>>Dipublikasi</option>
+            <option value="draft" <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-slate-700">Tampil:</label>
+          <select 
+            name="limit" 
+            onchange="this.form.submit()"
+            class="px-3 py-1.5 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium"
+          >
+            <option value="10" <%= pagination.limit == 10 ? 'selected' : '' %>>10</option>
+            <option value="25" <%= pagination.limit == 25 ? 'selected' : '' %>>25</option>
+            <option value="50" <%= pagination.limit == 50 ? 'selected' : '' %>>50</option>
+            <option value="100" <%= pagination.limit == 100 ? 'selected' : '' %>>100</option>
+          </select>
+          <span class="text-sm text-slate-600">data per halaman</span>
+        </div>
+        
+        <div class="flex gap-2">
+          <button 
+            type="submit" 
+            class="px-5 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-sm font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
+          >
+            Filter
+          </button>
+          <a 
+            href="/admin/exams" 
+            class="px-5 py-2 bg-gradient-to-r from-slate-200 to-slate-300 hover:from-slate-300 hover:to-slate-400 text-slate-700 text-sm font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
+          >
+            Reset
+          </a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Bulk Action Bar -->
+  <div class="px-6 py-3 bg-gradient-to-r from-rose-50 to-red-50 border-b-2 border-rose-100">
+    <div class="flex items-center justify-between">
+      <div class="text-sm text-slate-700">
+        <span class="font-semibold text-indigo-600"><%= (pagination.page - 1) * pagination.limit + 1 %></span> - 
+        <span class="font-semibold text-indigo-600"><%= Math.min(pagination.page * pagination.limit, pagination.total) %></span> 
+        dari <span class="font-semibold text-purple-600"><%= pagination.total %></span> ujian
       </div>
       <div id="bulkActionBar" class="hidden">
         <form action="/admin/exams/bulk-delete" method="POST" onsubmit="return confirmBulkDelete()">

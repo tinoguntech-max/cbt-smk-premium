@@ -1446,12 +1446,29 @@ router.get('/users', async (req, res) => {
 // Download users as Excel
 router.get('/users/download', async (req, res) => {
   try {
-    const [users] = await pool.query(
-      `SELECT u.id, u.username, u.full_name, u.role, u.is_active, c.name AS class_name, u.created_at
+    // Support filter by IDs (bulk download)
+    const { ids } = req.query;
+    let query = `SELECT u.id, u.username, u.full_name, u.role, u.is_active, c.name AS class_name, u.created_at
        FROM users u
-       LEFT JOIN classes c ON c.id=u.class_id
-       ORDER BY u.id DESC;`
-    );
+       LEFT JOIN classes c ON c.id=u.class_id`;
+    
+    const params = [];
+    if (ids) {
+      const idArray = ids.split(',').map(id => parseInt(id)).filter(id => !isNaN(id));
+      if (idArray.length > 0) {
+        query += ` WHERE u.id IN (${idArray.map(() => '?').join(',')})`;
+        params.push(...idArray);
+      }
+    }
+    
+    query += ` ORDER BY u.id DESC`;
+    
+    const [users] = await pool.query(query, params);
+    
+    if (users.length === 0) {
+      req.flash('error', 'Tidak ada data pengguna untuk diunduh.');
+      return res.redirect('/admin/users');
+    }
     
     // Format data for Excel
     const data = users.map(u => ({
@@ -1485,12 +1502,76 @@ router.get('/users/download', async (req, res) => {
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     
     // Send file
-    res.setHeader('Content-Disposition', `attachment; filename="data_pengguna_${Date.now()}.xlsx"`);
+    const filename = ids ? `data_pengguna_terpilih_${Date.now()}.xlsx` : `data_pengguna_${Date.now()}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
   } catch (e) {
     console.error(e);
     req.flash('error', 'Gagal mengunduh data pengguna.');
+    res.redirect('/admin/users');
+  }
+});
+
+// GET Print Login Cards
+router.get('/users/print-cards', async (req, res) => {
+  try {
+    const { ids, role, class_id } = req.query;
+    
+    let query = 'SELECT u.id, u.username, u.full_name, u.role, c.name AS class_name FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE 1=1';
+    const params = {};
+    
+    // Filter by specific IDs
+    if (ids) {
+      const idArray = ids.split(',').map(id => parseInt(id)).filter(id => !isNaN(id));
+      if (idArray.length > 0) {
+        query += ` AND u.id IN (${idArray.join(',')})`;
+      }
+    }
+    
+    // Filter by role
+    if (role && ['TEACHER', 'STUDENT'].includes(role)) {
+      query += ' AND u.role = :role';
+      params.role = role;
+    }
+    
+    // Filter by class
+    if (class_id) {
+      query += ' AND u.class_id = :class_id';
+      params.class_id = class_id;
+    }
+    
+    query += ' ORDER BY u.full_name ASC;';
+    
+    const [users] = await pool.query(query, params);
+    
+    if (users.length === 0) {
+      req.flash('error', 'Tidak ada pengguna yang dipilih untuk dicetak.');
+      return res.redirect('/admin/users');
+    }
+    
+    // Get classes for filter
+    const [classes] = await pool.query('SELECT id, name FROM classes ORDER BY name ASC;');
+    
+    // Get school info from env or default
+    const schoolInfo = {
+      name: process.env.SCHOOL_NAME || 'SMK Negeri 1 Kras',
+      address: process.env.SCHOOL_ADDRESS || 'Kediri, Jawa Timur',
+      logo: '/images/logo.png'
+    };
+    
+    res.render('admin/print_login_cards', {
+      title: 'Cetak Kartu Login',
+      users,
+      classes,
+      schoolInfo,
+      role: role || '',
+      class_id: class_id || '',
+      layout: false // No layout for print page
+    });
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal memuat halaman cetak kartu.');
     res.redirect('/admin/users');
   }
 });
@@ -2729,6 +2810,71 @@ router.get('/assignments', async (req, res) => {
     console.error(e);
     req.flash('error', 'Gagal memuat data tugas.');
     res.redirect('/admin');
+  }
+});
+
+// GET Admin Assignment Detail
+router.get('/assignments/:id', async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    
+    // Get assignment detail
+    const [[assignment]] = await pool.query(
+      `SELECT 
+        a.*,
+        u.full_name as teacher_name,
+        s.name as subject_name,
+        s.code as subject_code,
+        c.name as class_name
+      FROM assignments a
+      JOIN users u ON a.teacher_id = u.id
+      JOIN subjects s ON a.subject_id = s.id
+      LEFT JOIN classes c ON a.class_id = c.id
+      WHERE a.id = :id
+      LIMIT 1;`,
+      { id: assignmentId }
+    );
+    
+    if (!assignment) {
+      req.flash('error', 'Tugas tidak ditemukan.');
+      return res.redirect('/admin/assignments');
+    }
+    
+    // Get submissions
+    const [submissions] = await pool.query(
+      `SELECT 
+        asub.*,
+        u.full_name as student_name,
+        u.username as student_username,
+        c.name as class_name
+      FROM assignment_submissions asub
+      JOIN users u ON asub.student_id = u.id
+      LEFT JOIN classes c ON u.class_id = c.id
+      WHERE asub.assignment_id = :id
+      ORDER BY asub.submitted_at DESC;`,
+      { id: assignmentId }
+    );
+    
+    // Calculate stats
+    const stats = {
+      total_submissions: submissions.length,
+      graded: submissions.filter(s => s.score !== null).length,
+      pending: submissions.filter(s => s.score === null).length,
+      avg_score: submissions.length > 0 
+        ? submissions.filter(s => s.score !== null).reduce((sum, s) => sum + (s.score || 0), 0) / submissions.filter(s => s.score !== null).length 
+        : 0
+    };
+    
+    res.render('admin/assignment_detail', {
+      title: 'Detail Tugas',
+      assignment,
+      submissions,
+      stats
+    });
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal memuat detail tugas.');
+    res.redirect('/admin/assignments');
   }
 });
 

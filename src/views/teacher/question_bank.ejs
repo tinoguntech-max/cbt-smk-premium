@@ -3,8 +3,11 @@
     <h1 class="text-3xl font-bold text-indigo-900">Bank Soal</h1>
     <p class="mt-1 text-slate-600">Kelola soal yang dapat digunakan ulang untuk berbagai ujian</p>
   </div>
-  <a href="/teacher/question-bank/new" class="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold transition-all">
-    ➕ Tambah Soal
+  <a href="/teacher/question-bank/new" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-semibold shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+    </svg>
+    Tambah Soal
   </a>
 </div>
 
@@ -37,8 +40,8 @@
     </div>
     
     <div class="flex items-end gap-2">
-      <button type="submit" class="flex-1 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2">Filter</button>
-      <a href="/teacher/question-bank" class="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100">Reset</a>
+      <button type="submit" class="flex-1 rounded-xl bg-gradient-to-r from-indigo-400 to-purple-400 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold py-2 shadow-md transform hover:scale-105 transition-all">Filter</button>
+      <a href="/teacher/question-bank" class="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium transition-all">Reset</a>
     </div>
   </form>
 </div>
@@ -49,7 +52,12 @@
     <div class="text-6xl mb-3">📚</div>
     <div class="font-semibold text-slate-900 text-lg">Bank soal masih kosong</div>
     <div class="text-sm text-slate-600 mt-1">Tambahkan soal untuk dapat digunakan ulang di berbagai ujian</div>
-    <a href="/teacher/question-bank/new" class="mt-4 inline-block px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold">Tambah Soal Pertama</a>
+    <a href="/teacher/question-bank/new" class="mt-4 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-semibold shadow-lg transform hover:scale-105 transition-all duration-200">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Tambah Soal Pertama
+    </a>
   </div>
 <% } else { %>
   <div class="space-y-4">
@@ -76,6 +84,11 @@
               <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full <%= color.badge %> text-xs font-bold">
                 <%= q.subject_name %>
               </span>
+              <% if (q.chapter) { %>
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-teal-100 text-teal-700 text-xs font-bold">
+                  📚 <%= q.chapter %>
+                </span>
+              <% } %>
               <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full <%= diff.color %> text-xs font-bold">
                 <%= diff.text %>
               </span>
