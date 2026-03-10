@@ -10,7 +10,7 @@
   <!-- Card Filter -->
   <div class="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100 p-5">
     <h2 class="text-lg font-semibold text-indigo-900 mb-4">Filter Daftar Nilai</h2>
-    <form method="GET" action="/teacher/grades" class="grid lg:grid-cols-5 gap-3">
+    <form method="GET" action="/teacher/grades" class="grid lg:grid-cols-6 gap-3">
       <div>
         <label class="text-sm text-indigo-700 font-medium">Ujian</label>
         <select name="exam_id" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -32,6 +32,25 @@
       </div>
 
       <div>
+        <label class="text-sm text-indigo-700 font-medium">Status</label>
+        <select name="status" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">Semua Status</option>
+          <option value="SUBMITTED" <%= filters.status === 'SUBMITTED' ? 'selected' : '' %>>Selesai</option>
+          <option value="IN_PROGRESS" <%= filters.status === 'IN_PROGRESS' ? 'selected' : '' %>>Sedang Dikerjakan</option>
+          <option value="ABANDONED" <%= filters.status === 'ABANDONED' ? 'selected' : '' %>>Ditinggalkan</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="text-sm text-indigo-700 font-medium">Keterangan</label>
+        <select name="result" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">Semua</option>
+          <option value="LULUS" <%= filters.result === 'LULUS' ? 'selected' : '' %>>Lulus</option>
+          <option value="TIDAK_LULUS" <%= filters.result === 'TIDAK_LULUS' ? 'selected' : '' %>>Tidak Lulus</option>
+        </select>
+      </div>
+
+      <div>
         <label class="text-sm text-indigo-700 font-medium">Cari nama/username</label>
         <input name="q" value="<%= filters.q || '' %>" placeholder="contoh: Budi" class="mt-1 w-full rounded-xl bg-white border border-indigo-200 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
@@ -46,7 +65,7 @@
         </select>
       </div>
 
-      <div class="flex items-end gap-2">
+      <div class="lg:col-span-6 flex items-end gap-2">
         <button class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 transition-colors">Terapkan</button>
         <a href="/teacher/grades" class="px-4 py-2 rounded-xl border border-indigo-300 bg-white hover:bg-indigo-50 text-indigo-800 font-medium text-sm transition-colors">Reset</a>
       </div>
@@ -169,7 +188,7 @@
         </div>
         <div class="flex gap-2">
           <% if (pagination.page > 1) { %>
-            <a href="?page=<%= pagination.page - 1 %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&q=<%= filters.q %>" 
+            <a href="?page=<%= pagination.page - 1 %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&status=<%= filters.status %>&result=<%= filters.result %>&q=<%= filters.q %>" 
                class="px-4 py-2 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-purple-800 font-medium text-sm transition-colors">
               ← Sebelumnya
             </a>
@@ -180,14 +199,14 @@
             const endPage = Math.min(pagination.totalPages, pagination.page + 2);
             for (let i = startPage; i <= endPage; i++) { 
           %>
-            <a href="?page=<%= i %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&q=<%= filters.q %>" 
+            <a href="?page=<%= i %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&status=<%= filters.status %>&result=<%= filters.result %>&q=<%= filters.q %>" 
                class="px-4 py-2 rounded-lg border <%= i === pagination.page ? 'border-purple-600 bg-purple-600 text-white' : 'border-purple-300 bg-white hover:bg-purple-50 text-purple-800' %> font-medium text-sm transition-colors">
               <%= i %>
             </a>
           <% } %>
           
           <% if (pagination.page < pagination.totalPages) { %>
-            <a href="?page=<%= pagination.page + 1 %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&q=<%= filters.q %>" 
+            <a href="?page=<%= pagination.page + 1 %>&limit=<%= pagination.limit %>&exam_id=<%= filters.exam_id %>&class_id=<%= filters.class_id %>&status=<%= filters.status %>&result=<%= filters.result %>&q=<%= filters.q %>" 
                class="px-4 py-2 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-purple-800 font-medium text-sm transition-colors">
               Selanjutnya →
             </a>

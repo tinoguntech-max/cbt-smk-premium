@@ -1871,6 +1871,8 @@ router.get('/grades', async (req, res) => {
   const user = req.session.user;
   const exam_id = (req.query.exam_id || '').trim();
   const class_id = (req.query.class_id || '').trim();
+  const status = (req.query.status || '').trim();
+  const result = (req.query.result || '').trim();
   const q = (req.query.q || '').trim();
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -1892,6 +1894,16 @@ router.get('/grades', async (req, res) => {
   if (class_id) {
     where.push('u.class_id=:class_id');
     params.class_id = class_id;
+  }
+  if (status) {
+    where.push('a.status=:status');
+    params.status = status;
+  }
+  if (result && result === 'LULUS') {
+    where.push('a.status="SUBMITTED" AND a.score >= e.pass_score');
+  }
+  if (result && result === 'TIDAK_LULUS') {
+    where.push('a.status="SUBMITTED" AND a.score < e.pass_score');
   }
   if (q) {
     where.push('(u.full_name LIKE :q OR u.username LIKE :q)');
@@ -1935,7 +1947,7 @@ router.get('/grades', async (req, res) => {
     rows: rows2,
     exams,
     classes,
-    filters: { exam_id, class_id, q },
+    filters: { exam_id, class_id, status, result, q },
     pagination: {
       page,
       limit,

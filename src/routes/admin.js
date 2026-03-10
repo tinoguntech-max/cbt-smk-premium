@@ -1683,6 +1683,88 @@ router.post('/users/bulk-delete', async (req, res) => {
   res.redirect('/admin/users');
 });
 
+// Bulk move class users
+router.post('/users/bulk-move-class', async (req, res) => {
+  let user_ids = req.body.user_ids;
+  const class_id = req.body.class_id;
+  
+  // Parse JSON string if needed
+  if (typeof user_ids === 'string') {
+    try {
+      user_ids = JSON.parse(user_ids);
+    } catch (e) {
+      req.flash('error', 'Format data tidak valid.');
+      return res.redirect('/admin/users');
+    }
+  }
+  
+  if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+    req.flash('error', 'Tidak ada pengguna yang dipilih untuk dipindah kelas.');
+    return res.redirect('/admin/users');
+  }
+
+  // Convert to integers and filter valid IDs
+  const validIds = user_ids.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
+  
+  if (validIds.length === 0) {
+    req.flash('error', 'Tidak ada ID pengguna yang valid.');
+    return res.redirect('/admin/users');
+  }
+
+  // Validate class_id if provided
+  let targetClassId = null;
+  let targetClassName = 'Tanpa Kelas';
+  
+  if (class_id && class_id.trim() !== '') {
+    targetClassId = parseInt(class_id);
+    if (isNaN(targetClassId)) {
+      req.flash('error', 'ID kelas tidak valid.');
+      return res.redirect('/admin/users');
+    }
+    
+    // Get class name for confirmation message
+    try {
+      const [classRows] = await pool.query(`SELECT name FROM classes WHERE id = :id LIMIT 1;`, { id: targetClassId });
+      if (classRows.length === 0) {
+        req.flash('error', 'Kelas tujuan tidak ditemukan.');
+        return res.redirect('/admin/users');
+      }
+      targetClassName = classRows[0].name;
+    } catch (e) {
+      console.error(e);
+      req.flash('error', 'Gagal memvalidasi kelas tujuan.');
+      return res.redirect('/admin/users');
+    }
+  }
+
+  const conn = await pool.getConnection();
+  let updated = 0;
+  
+  try {
+    await conn.beginTransaction();
+    
+    const placeholders = validIds.map(() => '?').join(',');
+    
+    // Update users' class_id
+    const [result] = await conn.query(
+      `UPDATE users SET class_id = ? WHERE id IN (${placeholders});`, 
+      [targetClassId, ...validIds]
+    );
+    updated = result.affectedRows || 0;
+    
+    await conn.commit();
+    req.flash('success', `Berhasil memindahkan ${updated} pengguna ke kelas "${targetClassName}".`);
+  } catch (e) {
+    await conn.rollback();
+    console.error('Bulk move class error:', e);
+    req.flash('error', `Gagal memindahkan pengguna ke kelas. Error: ${e.message}`);
+  } finally {
+    conn.release();
+  }
+  
+  res.redirect('/admin/users');
+});
+
 // ===== EXAMS (UJIAN) =====
 router.get('/exams', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -2106,6 +2188,8 @@ router.get('/grades', async (req, res) => {
   const exam_id = (req.query.exam_id || '').trim();
   const class_id = (req.query.class_id || '').trim();
   const teacher_id = (req.query.teacher_id || '').trim();
+  const status = (req.query.status || '').trim();
+  const result = (req.query.result || '').trim();
   const q = (req.query.q || '').trim();
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -2130,6 +2214,16 @@ router.get('/grades', async (req, res) => {
   if (teacher_id) {
     where.push('e.teacher_id=:teacher_id');
     params.teacher_id = teacher_id;
+  }
+  if (status) {
+    where.push('a.status=:status');
+    params.status = status;
+  }
+  if (result && result === 'LULUS') {
+    where.push('a.status="SUBMITTED" AND a.score >= e.pass_score');
+  }
+  if (result && result === 'TIDAK_LULUS') {
+    where.push('a.status="SUBMITTED" AND a.score < e.pass_score');
   }
   if (q) {
     where.push('(u.full_name LIKE :q OR u.username LIKE :q OR e.title LIKE :q)');
@@ -2177,7 +2271,7 @@ router.get('/grades', async (req, res) => {
     exams,
     classes,
     teachers,
-    filters: { exam_id, class_id, teacher_id, q },
+    filters: { exam_id, class_id, teacher_id, status, result, q },
     pagination: {
       page,
       limit,

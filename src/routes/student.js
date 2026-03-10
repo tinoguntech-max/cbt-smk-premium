@@ -102,7 +102,7 @@ router.get('/exams', async (req, res) => {
   const user = req.session.user;
   const [exams] = await pool.query(
     `SELECT e.id, e.title, e.description, e.start_at, e.end_at, e.duration_minutes, e.pass_score, e.max_attempts,
-            e.access_code, s.name AS subject_name,
+            e.access_code, s.name AS subject_name, u.full_name AS teacher_name,
             (SELECT GROUP_CONCAT(c.name SEPARATOR ', ') 
              FROM exam_classes ec 
              JOIN classes c ON c.id=ec.class_id 
@@ -111,6 +111,7 @@ router.get('/exams', async (req, res) => {
             (SELECT COUNT(*) FROM attempts a WHERE a.exam_id=e.id AND a.student_id=:sid) AS attempts_count
      FROM exams e
      JOIN subjects s ON s.id=e.subject_id
+     JOIN users u ON u.id=e.teacher_id
      WHERE e.is_published=1
        AND (
          NOT EXISTS (SELECT 1 FROM exam_classes ec WHERE ec.exam_id=e.id)
@@ -126,11 +127,12 @@ router.get('/exams', async (req, res) => {
 router.get('/exams/:id', async (req, res) => {
   const user = req.session.user;
   const [[exam]] = await pool.query(
-    `SELECT e.*, s.name AS subject_name, c.name AS class_name,
+    `SELECT e.*, s.name AS subject_name, c.name AS class_name, u.full_name AS teacher_name,
             (SELECT COUNT(*) FROM questions q WHERE q.exam_id=e.id) AS question_count,
             (SELECT COUNT(*) FROM attempts a WHERE a.exam_id=e.id AND a.student_id=:sid) AS attempts_count
      FROM exams e
      JOIN subjects s ON s.id=e.subject_id
+     JOIN users u ON u.id=e.teacher_id
      LEFT JOIN classes c ON c.id=e.class_id
      WHERE e.id=:id AND e.is_published=1
        AND (
