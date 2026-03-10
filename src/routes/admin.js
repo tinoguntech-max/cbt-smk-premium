@@ -146,6 +146,248 @@ router.get('/', (req, res) => {
   res.render('admin/index', { title: 'Panel Admin' });
 });
 
+// ===== REPORTS =====
+router.get('/reports', async (req, res) => {
+  try {
+    // Parse filter parameters
+    const startDate = req.query.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = req.query.end_date || new Date().toISOString().split('T')[0];
+    const exportExcel = req.query.export === 'excel';
+
+    const filters = { start_date: startDate, end_date: endDate };
+
+    // Get summary statistics
+    const [[summaryRow]] = await pool.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM exams WHERE created_at BETWEEN :startDate AND :endDate) as total_exams,
+        (SELECT COUNT(*) FROM materials WHERE created_at BETWEEN :startDate AND :endDate) as total_materials,
+        (SELECT COUNT(*) FROM assignments WHERE created_at BETWEEN :startDate AND :endDate) as total_assignments,
+        (SELECT COUNT(*) FROM attempts WHERE created_at BETWEEN :startDate AND :endDate) as total_attempts,
+        (SELECT COALESCE(AVG(score), 0) FROM attempts WHERE created_at BETWEEN :startDate AND :endDate AND score IS NOT NULL) as avg_score,
+        (SELECT COUNT(*) FROM attempts WHERE created_at BETWEEN :startDate AND :endDate AND score >= (SELECT pass_score FROM exams WHERE id = attempts.exam_id)) as passed_attempts,
+        (SELECT COUNT(*) FROM material_reads WHERE created_at BETWEEN :startDate AND :endDate) as total_material_reads,
+        (SELECT COUNT(*) FROM assignment_submissions WHERE created_at BETWEEN :startDate AND :endDate) as total_submissions,
+        (SELECT COUNT(DISTINCT student_id) FROM attempts WHERE created_at BETWEEN :startDate AND :endDate) as active_students,
+        (SELECT COUNT(*) FROM users WHERE role = 'STUDENT' AND is_active = 1) as total_students
+    `, { startDate, endDate });
+
+    const summary = {
+      total_exams: summaryRow.total_exams || 0,
+      total_materials: summaryRow.total_materials || 0,
+      total_assignments: summaryRow.total_assignments || 0,
+      total_attempts: summaryRow.total_attempts || 0,
+      avg_score: parseFloat(summaryRow.avg_score) || 0,
+      pass_rate: summaryRow.total_attempts > 0 ? Math.round((summaryRow.passed_attempts / summaryRow.total_attempts) * 100) : 0,
+      total_material_reads: summaryRow.total_material_reads || 0,
+      avg_reads_per_material: summaryRow.total_materials > 0 ? (summaryRow.total_material_reads / summaryRow.total_materials) : 0,
+      total_submissions: summaryRow.total_submissions || 0,
+      submission_rate: summaryRow.total_assignments > 0 ? Math.round((summaryRow.total_submissions / summaryRow.total_assignments) * 100) : 0,
+      student_participation: summaryRow.total_students > 0 ? Math.round((summaryRow.active_students / summaryRow.total_students) * 100) : 0
+    };
+
+    // Get active teachers
+    const [activeTeachers] = await pool.query(`
+      SELECT 
+        u.id, u.full_name,
+        COUNT(DISTINCT e.id) as total_exams,
+        COUNT(DISTINCT m.id) as total_materials,
+        COUNT(DISTINCT a.id) as total_assignments,
+        (COUNT(DISTINCT e.id) * 3 + COUNT(DISTINCT m.id) * 2 + COUNT(DISTINCT a.id) * 2) as activity_score
+      FROM users u
+      LEFT JOIN exams e ON e.teacher_id = u.id AND e.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN materials m ON m.teacher_id = u.id AND m.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN assignments a ON a.teacher_id = u.id AND a.created_at BETWEEN :startDate AND :endDate
+      WHERE u.role = 'TEACHER' AND u.is_active = 1
+      GROUP BY u.id, u.full_name
+      HAVING activity_score > 0
+      ORDER BY activity_score DESC, u.full_name ASC
+      LIMIT 10
+    `, { startDate, endDate });
+
+    // Get active students
+    const [activeStudents] = await pool.query(`
+      SELECT 
+        u.id, u.full_name, c.name as class_name,
+        COUNT(DISTINCT at.id) as total_attempts,
+        COUNT(DISTINCT asub.id) as total_submissions,
+        COUNT(DISTINCT mr.id) as total_reads,
+        (COUNT(DISTINCT at.id) * 3 + COUNT(DISTINCT asub.id) * 2 + COUNT(DISTINCT mr.id) * 1) as activity_score
+      FROM users u
+      LEFT JOIN classes c ON c.id = u.class_id
+      LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN assignment_submissions asub ON asub.student_id = u.id AND asub.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN material_reads mr ON mr.student_id = u.id AND mr.created_at BETWEEN :startDate AND :endDate
+      WHERE u.role = 'STUDENT' AND u.is_active = 1
+      GROUP BY u.id, u.full_name, c.name
+      HAVING activity_score > 0
+      ORDER BY activity_score DESC, u.full_name ASC
+      LIMIT 10
+    `, { startDate, endDate });
+
+    // Get active classes
+    const [activeClassesRaw] = await pool.query(`
+      SELECT 
+        c.id, c.name as class_name,
+        COUNT(DISTINCT u.id) as total_students,
+        COUNT(DISTINCT at.id) as total_attempts,
+        COALESCE(AVG(at.score), 0) as avg_score,
+        CASE 
+          WHEN COUNT(DISTINCT u.id) > 0 THEN 
+            ROUND((COUNT(DISTINCT at.student_id) / COUNT(DISTINCT u.id)) * 100)
+          ELSE 0 
+        END as participation_rate
+      FROM classes c
+      LEFT JOIN users u ON u.class_id = c.id AND u.role = 'STUDENT' AND u.is_active = 1
+      LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at BETWEEN :startDate AND :endDate
+      GROUP BY c.id, c.name
+      HAVING total_students > 0
+      ORDER BY participation_rate DESC, total_attempts DESC, c.name ASC
+    `, { startDate, endDate });
+
+    // Convert avg_score to numbers
+    const activeClasses = activeClassesRaw.map(cls => ({
+      ...cls,
+      avg_score: parseFloat(cls.avg_score) || 0
+    }));
+
+    // Get popular subjects
+    const [popularSubjectsRaw] = await pool.query(`
+      SELECT 
+        s.id, s.name as subject_name,
+        COUNT(DISTINCT e.id) as total_exams,
+        COUNT(DISTINCT m.id) as total_materials,
+        COUNT(DISTINCT at.id) as total_attempts,
+        COALESCE(AVG(at.score), 0) as avg_score
+      FROM subjects s
+      LEFT JOIN exams e ON e.subject_id = s.id AND e.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN materials m ON m.subject_id = s.id AND m.created_at BETWEEN :startDate AND :endDate
+      LEFT JOIN attempts at ON at.exam_id = e.id AND at.created_at BETWEEN :startDate AND :endDate
+      GROUP BY s.id, s.name
+      HAVING (COUNT(DISTINCT e.id) + COUNT(DISTINCT m.id) + COUNT(DISTINCT at.id)) > 0
+      ORDER BY (COUNT(DISTINCT e.id) + COUNT(DISTINCT m.id) + COUNT(DISTINCT at.id)) DESC, avg_score DESC
+      LIMIT 10
+    `, { startDate, endDate });
+
+    // Convert avg_score to numbers
+    const popularSubjects = popularSubjectsRaw.map(subj => ({
+      ...subj,
+      avg_score: parseFloat(subj.avg_score) || 0
+    }));
+
+    // Export to Excel if requested
+    if (exportExcel) {
+      const wb = XLSX.utils.book_new();
+      
+      // Summary sheet
+      const summaryData = [
+        ['Metrik', 'Nilai'],
+        ['Total Ujian', summary.total_exams],
+        ['Total Materi', summary.total_materials],
+        ['Total Tugas', summary.total_assignments],
+        ['Total Percobaan Ujian', summary.total_attempts],
+        ['Rata-rata Nilai', summary.avg_score.toFixed(2)],
+        ['Tingkat Kelulusan (%)', summary.pass_rate],
+        ['Total Pembacaan Materi', summary.total_material_reads],
+        ['Rata-rata Pembacaan per Materi', summary.avg_reads_per_material.toFixed(2)],
+        ['Total Pengumpulan Tugas', summary.total_submissions],
+        ['Tingkat Pengumpulan Tugas (%)', summary.submission_rate],
+        ['Partisipasi Siswa (%)', summary.student_participation]
+      ];
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Ringkasan');
+
+      // Active teachers sheet
+      const teachersData = [
+        ['Ranking', 'Nama Guru', 'Total Ujian', 'Total Materi', 'Total Tugas', 'Skor Aktivitas'],
+        ...activeTeachers.map((teacher, index) => [
+          index + 1,
+          teacher.full_name,
+          teacher.total_exams,
+          teacher.total_materials,
+          teacher.total_assignments,
+          teacher.activity_score
+        ])
+      ];
+      const teachersWs = XLSX.utils.aoa_to_sheet(teachersData);
+      XLSX.utils.book_append_sheet(wb, teachersWs, 'Guru Teraktif');
+
+      // Active students sheet
+      const studentsData = [
+        ['Ranking', 'Nama Siswa', 'Kelas', 'Total Ujian', 'Total Tugas', 'Skor Aktivitas'],
+        ...activeStudents.map((student, index) => [
+          index + 1,
+          student.full_name,
+          student.class_name || 'Tanpa Kelas',
+          student.total_attempts,
+          student.total_submissions,
+          student.activity_score
+        ])
+      ];
+      const studentsWs = XLSX.utils.aoa_to_sheet(studentsData);
+      XLSX.utils.book_append_sheet(wb, studentsWs, 'Siswa Teraktif');
+
+      // Active classes sheet
+      const classesData = [
+        ['Ranking', 'Nama Kelas', 'Total Siswa', 'Total Ujian', 'Rata-rata Nilai', 'Partisipasi (%)'],
+        ...activeClasses.map((classData, index) => [
+          index + 1,
+          classData.class_name,
+          classData.total_students,
+          classData.total_attempts,
+          classData.avg_score.toFixed(2),
+          classData.participation_rate
+        ])
+      ];
+      const classesWs = XLSX.utils.aoa_to_sheet(classesData);
+      XLSX.utils.book_append_sheet(wb, classesWs, 'Kelas Teraktif');
+
+      // Popular subjects sheet
+      const subjectsData = [
+        ['Ranking', 'Mata Pelajaran', 'Total Ujian', 'Total Materi', 'Total Percobaan', 'Rata-rata Nilai'],
+        ...popularSubjects.map((subject, index) => [
+          index + 1,
+          subject.subject_name,
+          subject.total_exams,
+          subject.total_materials,
+          subject.total_attempts,
+          subject.avg_score.toFixed(2)
+        ])
+      ];
+      const subjectsWs = XLSX.utils.aoa_to_sheet(subjectsData);
+      XLSX.utils.book_append_sheet(wb, subjectsWs, 'Mata Pelajaran Populer');
+
+      // Generate buffer and send file
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const filename = `Rekap_LMS_${startDate}_${endDate}_${Date.now()}.xlsx`;
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      return res.send(buffer);
+    }
+
+    res.render('admin/reports', {
+      title: 'Rekap Penggunaan LMS',
+      filters,
+      summary,
+      activeTeachers,
+      activeStudents,
+      activeClasses,
+      popularSubjects
+    });
+
+  } catch (error) {
+    console.error('Error generating reports:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
+    req.flash('error', 'Gagal memuat laporan rekap: ' + error.message);
+    res.redirect('/admin');
+  }
+});
+
 // ===== CLASSES =====
 router.get('/classes', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
