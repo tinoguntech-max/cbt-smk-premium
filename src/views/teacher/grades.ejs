@@ -84,6 +84,9 @@
       <table class="w-full text-sm">
         <thead class="text-purple-700">
           <tr>
+            <th class="text-left py-2">
+              <input type="checkbox" id="selectAll" class="rounded border-purple-300 text-purple-600 focus:ring-purple-500" onchange="toggleSelectAll()">
+            </th>
             <th class="text-left py-2">Ujian</th>
             <th class="text-left py-2">Siswa</th>
             <th class="text-left py-2">Kelas</th>
@@ -95,10 +98,15 @@
         </thead>
         <tbody>
           <% if (!rows.length) { %>
-            <tr><td colspan="7" class="py-8 text-center text-purple-600">Belum ada data untuk filter tersebut.</td></tr>
+            <tr><td colspan="8" class="py-8 text-center text-purple-600">Belum ada data untuk filter tersebut.</td></tr>
           <% } %>
           <% rows.forEach(r => { %>
             <tr class="border-t border-purple-200">
+              <td class="py-3">
+                <input type="checkbox" class="attempt-checkbox rounded border-purple-300 text-purple-600 focus:ring-purple-500" 
+                       value="<%= r.id %>" data-student="<%= r.student_name %>" data-exam="<%= r.exam_title %>" 
+                       onchange="updateBulkActions()">
+              </td>
               <td class="py-3">
                 <div class="font-medium text-purple-900"><%= r.exam_title %></div>
                 <div class="text-xs text-purple-600">Passing: <%= r.pass_score %></div>
@@ -132,6 +140,25 @@
           <% }) %>
         </tbody>
       </table>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div id="bulkActionsBar" class="hidden mt-4 p-4 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-amber-800 font-medium">
+            <span id="selectedCount">0</span> nilai dipilih
+          </span>
+          <button onclick="clearSelection()" class="text-sm text-amber-600 hover:text-amber-800 underline">
+            Batal Pilih
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="bulkReset()" class="px-4 py-2 rounded-xl border border-rose-300 bg-gradient-to-br from-rose-100 to-rose-200 hover:from-rose-200 hover:to-rose-300 text-rose-800 font-medium text-sm transition-all">
+            🗑️ Reset Nilai Terpilih
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Pagination -->
@@ -170,3 +197,128 @@
     <% } %>
   </div>
 </div>
+
+<script>
+function toggleSelectAll() {
+  const selectAll = document.getElementById('selectAll');
+  const checkboxes = document.querySelectorAll('.attempt-checkbox');
+  
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = selectAll.checked;
+  });
+  
+  updateBulkActions();
+}
+
+function updateBulkActions() {
+  const checkboxes = document.querySelectorAll('.attempt-checkbox:checked');
+  const bulkActionsBar = document.getElementById('bulkActionsBar');
+  const selectedCount = document.getElementById('selectedCount');
+  const selectAll = document.getElementById('selectAll');
+  
+  selectedCount.textContent = checkboxes.length;
+  
+  if (checkboxes.length > 0) {
+    bulkActionsBar.classList.remove('hidden');
+  } else {
+    bulkActionsBar.classList.add('hidden');
+  }
+  
+  // Update select all checkbox state
+  const allCheckboxes = document.querySelectorAll('.attempt-checkbox');
+  if (checkboxes.length === allCheckboxes.length && allCheckboxes.length > 0) {
+    selectAll.checked = true;
+    selectAll.indeterminate = false;
+  } else if (checkboxes.length > 0) {
+    selectAll.checked = false;
+    selectAll.indeterminate = true;
+  } else {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+}
+
+function clearSelection() {
+  const checkboxes = document.querySelectorAll('.attempt-checkbox');
+  const selectAll = document.getElementById('selectAll');
+  
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = false;
+  });
+  selectAll.checked = false;
+  selectAll.indeterminate = false;
+  
+  updateBulkActions();
+}
+
+function bulkReset() {
+  const checkboxes = document.querySelectorAll('.attempt-checkbox:checked');
+  
+  console.log('=== CLIENT BULK RESET DEBUG ===');
+  console.log('Found checkboxes:', checkboxes.length);
+  
+  if (checkboxes.length === 0) {
+    alert('Pilih minimal satu nilai untuk direset.');
+    return;
+  }
+  
+  // Build confirmation message
+  let message = `Anda akan mereset ${checkboxes.length} nilai:\n\n`;
+  checkboxes.forEach((checkbox, index) => {
+    if (index < 5) { // Show max 5 items in confirmation
+      const student = checkbox.dataset.student;
+      const exam = checkbox.dataset.exam;
+      message += `• ${student} - ${exam}\n`;
+    }
+  });
+  
+  if (checkboxes.length > 5) {
+    message += `... dan ${checkboxes.length - 5} lainnya\n`;
+  }
+  
+  message += '\nSiswa dapat mengulang ujian setelah nilai direset. Lanjutkan?';
+  
+  if (!confirm(message)) {
+    return;
+  }
+  
+  // Collect attempt IDs
+  const attemptIds = Array.from(checkboxes).map(cb => cb.value);
+  console.log('Attempt IDs to send:', attemptIds);
+  
+  // Create form and submit
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/teacher/attempts/bulk-reset';
+  
+  // Add CSRF token if available
+  const csrfToken = document.querySelector('meta[name="csrf-token"]');
+  if (csrfToken) {
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = csrfToken.getAttribute('content');
+    form.appendChild(csrfInput);
+  }
+  
+  attemptIds.forEach(id => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'attempt_ids[]';
+    input.value = id;
+    form.appendChild(input);
+    console.log('Added input:', input.name, '=', input.value);
+  });
+  
+  console.log('Form HTML:', form.innerHTML);
+  console.log('Submitting form to:', form.action);
+  
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  updateBulkActions();
+});
+</script>

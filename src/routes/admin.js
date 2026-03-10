@@ -1634,28 +1634,48 @@ router.post('/users/bulk-delete', async (req, res) => {
     // Delete related data first to avoid foreign key constraints
     const placeholders = validIds.map(() => '?').join(',');
     
-    // Delete attempts
-    await conn.query(`DELETE FROM attempts WHERE user_id IN (${placeholders});`, validIds);
+    console.log(`Deleting related data for user IDs: ${validIds.join(', ')}`);
     
-    // Delete assignment submissions
-    await conn.query(`DELETE FROM assignment_submissions WHERE user_id IN (${placeholders});`, validIds);
+    // List of tables to check and delete from (in order)
+    const tablesToDelete = [
+      { table: 'student_answers', column: 'user_id' },
+      { table: 'exam_results', column: 'user_id' },
+      { table: 'attempts', column: 'user_id' },
+      { table: 'assignment_submissions', column: 'user_id' },
+      { table: 'material_reads', column: 'student_id' },
+      { table: 'notification_reads', column: 'user_id' },
+      { table: 'live_class_participants', column: 'user_id' },
+      { table: 'profile_photos', column: 'user_id' }
+    ];
     
-    // Delete notification reads
-    await conn.query(`DELETE FROM notification_reads WHERE user_id IN (${placeholders});`, validIds);
-    
-    // Delete live class participants
-    await conn.query(`DELETE FROM live_class_participants WHERE user_id IN (${placeholders});`, validIds);
+    // Delete from each table if it exists
+    for (const { table, column } of tablesToDelete) {
+      try {
+        // Check if table exists
+        const [tables] = await conn.query(`SHOW TABLES LIKE '${table}';`);
+        
+        if (tables.length > 0) {
+          const [result] = await conn.query(`DELETE FROM ${table} WHERE ${column} IN (${placeholders});`, validIds);
+          console.log(`✅ Deleted ${result.affectedRows || 0} records from ${table}`);
+        } else {
+          console.log(`⚠️  Table ${table} not found, skipping...`);
+        }
+      } catch (e) {
+        console.log(`⚠️  Error deleting from ${table}: ${e.message}`);
+        // Continue with other tables
+      }
+    }
     
     // Finally delete users
     const [result] = await conn.query(`DELETE FROM users WHERE id IN (${placeholders});`, validIds);
     deleted = result.affectedRows || 0;
     
     await conn.commit();
-    req.flash('success', `Berhasil menghapus ${deleted} pengguna dan data terkait.`);
+    req.flash('success', `Berhasil menghapus ${deleted} pengguna dan semua data terkait.`);
   } catch (e) {
     await conn.rollback();
-    console.error(e);
-    req.flash('error', 'Gagal menghapus pengguna. Terjadi kesalahan pada database.');
+    console.error('Bulk delete error:', e);
+    req.flash('error', `Gagal menghapus pengguna. Error: ${e.message}`);
   } finally {
     conn.release();
   }
@@ -2079,6 +2099,214 @@ router.post('/materials/bulk-delete', async (req, res) => {
   }
   
   res.redirect('/admin/materials');
+});
+
+// ===== GRADES (NILAI) =====
+router.get('/grades', async (req, res) => {
+  const exam_id = (req.query.exam_id || '').trim();
+  const class_id = (req.query.class_id || '').trim();
+  const teacher_id = (req.query.teacher_id || '').trim();
+  const q = (req.query.q || '').trim();
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
+
+  // Get filter options
+  const [exams] = await pool.query(`SELECT id, title FROM exams ORDER BY title ASC;`);
+  const [classes] = await pool.query(`SELECT id, name FROM classes ORDER BY name ASC;`);
+  const [teachers] = await pool.query(`SELECT id, full_name FROM users WHERE role='TEACHER' ORDER BY full_name ASC;`);
+
+  const where = ['1=1'];
+  const params = {};
+
+  if (exam_id) {
+    where.push('e.id=:exam_id');
+    params.exam_id = exam_id;
+  }
+  if (class_id) {
+    where.push('u.class_id=:class_id');
+    params.class_id = class_id;
+  }
+  if (teacher_id) {
+    where.push('e.teacher_id=:teacher_id');
+    params.teacher_id = teacher_id;
+  }
+  if (q) {
+    where.push('(u.full_name LIKE :q OR u.username LIKE :q OR e.title LIKE :q)');
+    params.q = '%' + q + '%';
+  }
+
+  // Count total
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM attempts a
+     JOIN exams e ON e.id=a.exam_id
+     JOIN users u ON u.id=a.student_id
+     LEFT JOIN classes c ON c.id=u.class_id
+     LEFT JOIN users t ON t.id=e.teacher_id
+     WHERE ${where.join(' AND ')};`,
+    params
+  );
+
+  // Get paginated data
+  const [rows] = await pool.query(
+    `SELECT a.id, a.score, a.status, a.started_at, a.finished_at,
+            e.id AS exam_id, e.title AS exam_title, e.pass_score,
+            u.full_name AS student_name, u.username,
+            c.name AS class_name,
+            t.full_name AS teacher_name
+     FROM attempts a
+     JOIN exams e ON e.id=a.exam_id
+     JOIN users u ON u.id=a.student_id
+     LEFT JOIN classes c ON c.id=u.class_id
+     LEFT JOIN users t ON t.id=e.teacher_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY a.id DESC
+     LIMIT :limit OFFSET :offset;`,
+    { ...params, limit, offset }
+  );
+
+  const rows2 = rows.map((r) => ({
+    ...r,
+    is_pass: r.status === 'SUBMITTED' ? Number(r.score) >= Number(r.pass_score) : 0
+  }));
+
+  res.render('admin/grades', {
+    title: 'Kelola Nilai',
+    rows: rows2,
+    exams,
+    classes,
+    teachers,
+    filters: { exam_id, class_id, teacher_id, q },
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  });
+});
+
+// Bulk reset nilai untuk admin
+router.post('/attempts/bulk-reset', async (req, res) => {
+  // Debug logging
+  console.log('=== ADMIN BULK RESET DEBUG ===');
+  console.log('req.body:', req.body);
+  console.log('req.body keys:', Object.keys(req.body));
+  
+  let attempt_ids = req.body['attempt_ids[]'] || req.body.attempt_ids || [];
+  
+  console.log('attempt_ids raw:', attempt_ids);
+  console.log('attempt_ids type:', typeof attempt_ids);
+  console.log('attempt_ids isArray:', Array.isArray(attempt_ids));
+  
+  // Ensure it's an array
+  if (!Array.isArray(attempt_ids)) {
+    attempt_ids = [attempt_ids];
+  }
+  
+  // Filter out empty values
+  attempt_ids = attempt_ids.filter(id => id && id.toString().trim() !== '');
+  
+  console.log('attempt_ids filtered:', attempt_ids);
+  
+  if (attempt_ids.length === 0) {
+    console.log('No attempt_ids found, redirecting with error');
+    req.flash('error', 'Tidak ada nilai yang dipilih untuk direset.');
+    return res.redirect('/admin/grades');
+  }
+
+  // Convert to integers and filter valid IDs
+  const validIds = attempt_ids.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
+  
+  console.log('validIds:', validIds);
+  
+  if (validIds.length === 0) {
+    console.log('No valid IDs found');
+    req.flash('error', 'Tidak ada ID attempt yang valid.');
+    return res.redirect('/admin/grades');
+  }
+
+  const conn = await pool.getConnection();
+  let deleted = 0;
+  
+  try {
+    await conn.beginTransaction();
+    
+    // Get attempt details for logging
+    const placeholders = validIds.map(() => '?').join(',');
+    const [attempts] = await conn.query(
+      `SELECT a.id, e.title AS exam_title, u.full_name AS student_name
+       FROM attempts a
+       JOIN exams e ON e.id=a.exam_id
+       JOIN users u ON u.id=a.student_id
+       WHERE a.id IN (${placeholders});`,
+      validIds
+    );
+    
+    console.log('Found attempts:', attempts.length, 'Expected:', validIds.length);
+    
+    if (attempts.length === 0) {
+      await conn.rollback();
+      req.flash('error', 'Tidak ada attempt yang ditemukan.');
+      return res.redirect('/admin/grades');
+    }
+    
+    // Delete attempts (attempt_answers will be deleted automatically via CASCADE)
+    const [result] = await conn.query(
+      `DELETE FROM attempts WHERE id IN (${placeholders});`,
+      validIds
+    );
+    
+    deleted = result.affectedRows || 0;
+    console.log('Deleted attempts:', deleted);
+    
+    await conn.commit();
+    req.flash('success', `Berhasil reset ${deleted} nilai siswa. Siswa dapat mengulang ujian.`);
+  } catch (e) {
+    await conn.rollback();
+    console.error('Admin bulk reset error:', e);
+    req.flash('error', `Gagal reset nilai. Error: ${e.message}`);
+  } finally {
+    conn.release();
+  }
+  
+  res.redirect('/admin/grades');
+});
+
+// Reset individual attempt untuk admin
+router.post('/attempts/:id/reset', async (req, res) => {
+  const attemptId = req.params.id;
+
+  // Get attempt details
+  const [[attempt]] = await pool.query(
+    `SELECT a.id, a.exam_id, e.title AS exam_title, u.full_name AS student_name
+     FROM attempts a
+     JOIN exams e ON e.id=a.exam_id
+     JOIN users u ON u.id=a.student_id
+     WHERE a.id=:aid
+     LIMIT 1;`,
+    { aid: attemptId }
+  );
+
+  if (!attempt) {
+    req.flash('error', 'Hasil ujian tidak ditemukan.');
+    return res.redirect('/admin/grades');
+  }
+
+  try {
+    // Delete attempt (attempt_answers will be deleted automatically via CASCADE)
+    await pool.query(`DELETE FROM attempts WHERE id=:id;`, { id: attemptId });
+    req.flash(
+      'success',
+      `Berhasil reset nilai ${attempt.student_name} untuk ujian: ${attempt.exam_title}. Siswa dapat mengulang ujian.`
+    );
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Gagal reset nilai.');
+  }
+
+  return res.redirect('/admin/grades');
 });
 
 module.exports = router;

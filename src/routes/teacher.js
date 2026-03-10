@@ -1777,6 +1777,95 @@ router.post('/attempts/:id/reset', async (req, res) => {
   return res.redirect('/teacher/grades');
 });
 
+// Bulk reset nilai (reset multiple attempts)
+router.post('/attempts/bulk-reset', async (req, res) => {
+  const user = req.session.user;
+  
+  // Debug logging
+  console.log('=== BULK RESET DEBUG ===');
+  console.log('req.body:', req.body);
+  console.log('req.body keys:', Object.keys(req.body));
+  
+  let attempt_ids = req.body['attempt_ids[]'] || req.body.attempt_ids || [];
+  
+  console.log('attempt_ids raw:', attempt_ids);
+  console.log('attempt_ids type:', typeof attempt_ids);
+  console.log('attempt_ids isArray:', Array.isArray(attempt_ids));
+  
+  // Ensure it's an array
+  if (!Array.isArray(attempt_ids)) {
+    attempt_ids = [attempt_ids];
+  }
+  
+  // Filter out empty values
+  attempt_ids = attempt_ids.filter(id => id && id.toString().trim() !== '');
+  
+  console.log('attempt_ids filtered:', attempt_ids);
+  
+  if (attempt_ids.length === 0) {
+    console.log('No attempt_ids found, redirecting with error');
+    req.flash('error', 'Tidak ada nilai yang dipilih untuk direset.');
+    return res.redirect('/teacher/grades');
+  }
+
+  // Convert to integers and filter valid IDs
+  const validIds = attempt_ids.map(id => parseInt(id)).filter(id => !isNaN(id) && id > 0);
+  
+  console.log('validIds:', validIds);
+  
+  if (validIds.length === 0) {
+    console.log('No valid IDs found');
+    req.flash('error', 'Tidak ada ID attempt yang valid.');
+    return res.redirect('/teacher/grades');
+  }
+
+  const conn = await pool.getConnection();
+  let deleted = 0;
+  
+  try {
+    await conn.beginTransaction();
+    
+    // Verify ownership: all attempts must belong to exams owned by this teacher
+    const placeholders = validIds.map(() => '?').join(',');
+    const [attempts] = await conn.query(
+      `SELECT a.id, e.title AS exam_title, u.full_name AS student_name
+       FROM attempts a
+       JOIN exams e ON e.id=a.exam_id
+       JOIN users u ON u.id=a.student_id
+       WHERE a.id IN (${placeholders}) AND e.teacher_id=?;`,
+      [...validIds, user.id]
+    );
+    
+    console.log('Found attempts:', attempts.length, 'Expected:', validIds.length);
+    
+    if (attempts.length !== validIds.length) {
+      await conn.rollback();
+      req.flash('error', 'Akses ditolak. Beberapa attempt tidak ditemukan atau bukan milik Anda.');
+      return res.redirect('/teacher/grades');
+    }
+    
+    // Delete attempts (attempt_answers will be deleted automatically via CASCADE)
+    const [result] = await conn.query(
+      `DELETE FROM attempts WHERE id IN (${placeholders});`,
+      validIds
+    );
+    
+    deleted = result.affectedRows || 0;
+    console.log('Deleted attempts:', deleted);
+    
+    await conn.commit();
+    req.flash('success', `Berhasil reset ${deleted} nilai siswa. Siswa dapat mengulang ujian.`);
+  } catch (e) {
+    await conn.rollback();
+    console.error('Bulk reset error:', e);
+    req.flash('error', `Gagal reset nilai. Error: ${e.message}`);
+  } finally {
+    conn.release();
+  }
+  
+  res.redirect('/teacher/grades');
+});
+
 // Daftar nilai: attempts for teacher's exams (filterable)
 router.get('/grades', async (req, res) => {
   const user = req.session.user;
@@ -2004,10 +2093,23 @@ router.get('/material-views', async (req, res) => {
   // Get students who haven't viewed
   let notViewedStudents = [];
   if (material_id) {
-    // Get for specific material
+    // Get material's class_id first
+    const [[materialInfo]] = await pool.query(
+      `SELECT class_id FROM materials WHERE id=:material_id LIMIT 1;`,
+      { material_id }
+    );
+    
+    // Get for specific material - only students from material's class
     const notViewedWhere = ['u.role="STUDENT"', 'u.is_active=1'];
     const notViewedParams = { material_id };
     
+    // If material has specific class, filter by that class
+    if (materialInfo && materialInfo.class_id) {
+      notViewedWhere.push('u.class_id=:material_class_id');
+      notViewedParams.material_class_id = materialInfo.class_id;
+    }
+    
+    // Additional filter from user selection
     if (class_id) {
       notViewedWhere.push('u.class_id=:class_id');
       notViewedParams.class_id = class_id;
