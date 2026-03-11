@@ -161,3 +161,55 @@ Test berhasil untuk:
 
 ### Status
 ✅ SELESAI - Create dan Edit tugas sudah support multiple classes
+
+## Fix: Ranking Tugas di Laporan LMS
+
+### Status: ✅ SELESAI
+
+Setelah implementasi multiple classes, ranking kelas di laporan LMS sudah diperbaiki untuk menghitung tugas dengan benar.
+
+### Masalah yang Diperbaiki
+
+#### Sebelum Fix
+- Query menghitung SEMUA submission siswa, tanpa peduli tugas ditujukan untuk kelas mana
+- Siswa X TKJ 2 mengerjakan tugas XI KULINER 3 → Dihitung sebagai aktivitas X TKJ 2 (SALAH)
+- Ranking tidak akurat
+
+#### Setelah Fix
+- Query hanya menghitung submission untuk tugas yang ditujukan ke kelas tersebut
+- Menggunakan subquery dengan `assignment_classes` junction table
+- Ranking akurat sesuai aktivitas kelas yang sebenarnya
+
+### Perubahan Query
+
+#### Admin & Principal Reports
+```sql
+-- BEFORE
+LEFT JOIN assignment_submissions asub ON asub.student_id = u.id 
+  AND asub.created_at BETWEEN :startDate AND :endDate
+
+-- AFTER  
+LEFT JOIN (
+  SELECT asub.*, ac.class_id as target_class_id
+  FROM assignment_submissions asub
+  INNER JOIN assignment_classes ac ON ac.assignment_id = asub.assignment_id
+  WHERE asub.created_at BETWEEN :startDate AND :endDate
+) asub_filtered ON asub_filtered.student_id = u.id 
+  AND asub_filtered.target_class_id = c.id
+```
+
+### Files Modified
+
+1. **src/routes/admin.js** - Update query activeClasses
+2. **src/routes/principal.js** - Update query activeClasses
+
+### Testing
+
+Test berhasil menunjukkan:
+- ✅ Query berjalan tanpa error
+- ✅ Hanya submission yang relevan yang dihitung
+- ✅ X TKJ 2 tidak dapat poin dari tugas XI KULINER 3
+- ✅ Ranking kelas akurat
+
+### Status
+✅ SELESAI - Ranking tugas di laporan LMS sekarang akurat dengan sistem multiple classes
