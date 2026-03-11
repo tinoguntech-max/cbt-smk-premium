@@ -1,9 +1,17 @@
 <div class="space-y-6">
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
     <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">Live Classes</h1>
-    <a href="/teacher/live-classes/new" class="w-full sm:w-auto text-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-sm transition-all">
-      + Buat Live Class
-    </a>
+    <div class="flex gap-2 w-full sm:w-auto">
+      <a href="/teacher/live-classes/new" class="flex-1 sm:flex-none text-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl shadow-sm transition-all">
+        + Buat Live Class
+      </a>
+      <a href="/teacher" class="flex-none inline-flex items-center gap-2 px-4 py-3 bg-orange-100/80 backdrop-blur-sm hover:bg-orange-200/90 text-orange-800 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Kembali
+      </a>
+    </div>
   </div>
 
   <% if (liveClasses.length === 0) { %>

@@ -2135,6 +2135,11 @@ router.get('/material-views', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
+  
+  // Pagination for not viewed students
+  const notViewedPage = parseInt(req.query.not_viewed_page) || 1;
+  const notViewedLimit = 10; // Fixed at 10 per page
+  const notViewedOffset = (notViewedPage - 1) * notViewedLimit;
 
   // Get teacher's materials for filter
   const [materials] = await pool.query(
@@ -2159,7 +2164,7 @@ router.get('/material-views', async (req, res) => {
     params.q = '%' + q + '%';
   }
 
-  // Count total
+  // Count total viewed
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM material_reads mv
@@ -2170,7 +2175,7 @@ router.get('/material-views', async (req, res) => {
     params
   );
 
-  // Get paginated data
+  // Get paginated viewed data
   const [rows] = await pool.query(
     `SELECT mv.id, mv.first_opened_at AS opened_at, mv.completed_at,
             m.id AS material_id, m.title AS material_title,
@@ -2186,8 +2191,10 @@ router.get('/material-views', async (req, res) => {
     { ...params, limit, offset }
   );
 
-  // Get students who haven't viewed
+  // Get students who haven't viewed - with pagination
   let notViewedStudents = [];
+  let notViewedTotal = 0;
+  
   if (material_id) {
     // Get material's class_id first
     const [[materialInfo]] = await pool.query(
@@ -2216,6 +2223,21 @@ router.get('/material-views', async (req, res) => {
       notViewedParams.q = '%' + q + '%';
     }
     
+    // Count total not viewed
+    const [[{ notViewedCount }]] = await pool.query(
+      `SELECT COUNT(*) AS notViewedCount
+       FROM users u
+       LEFT JOIN classes c ON c.id=u.class_id
+       WHERE ${notViewedWhere.join(' AND ')}
+         AND NOT EXISTS (
+           SELECT 1 FROM material_reads mv
+           WHERE mv.student_id=u.id AND mv.material_id=:material_id
+         );`,
+      notViewedParams
+    );
+    notViewedTotal = notViewedCount;
+    
+    // Get paginated not viewed data
     [notViewedStudents] = await pool.query(
       `SELECT u.id, u.full_name AS student_name, u.username,
               c.name AS class_name,
@@ -2227,8 +2249,9 @@ router.get('/material-views', async (req, res) => {
            SELECT 1 FROM material_reads mv
            WHERE mv.student_id=u.id AND mv.material_id=:material_id
          )
-       ORDER BY u.full_name ASC;`,
-      notViewedParams
+       ORDER BY u.full_name ASC
+       LIMIT :limit OFFSET :offset;`,
+      { ...notViewedParams, limit: notViewedLimit, offset: notViewedOffset }
     );
   } else {
     // Get students who haven't viewed ANY material from this teacher
@@ -2245,6 +2268,22 @@ router.get('/material-views', async (req, res) => {
       notViewedParams.q = '%' + q + '%';
     }
     
+    // Count total not viewed
+    const [[{ notViewedCount }]] = await pool.query(
+      `SELECT COUNT(*) AS notViewedCount
+       FROM users u
+       LEFT JOIN classes c ON c.id=u.class_id
+       WHERE ${notViewedWhere.join(' AND ')}
+         AND NOT EXISTS (
+           SELECT 1 FROM material_reads mv
+           JOIN materials m ON m.id=mv.material_id
+           WHERE mv.student_id=u.id AND m.teacher_id=:tid
+         );`,
+      notViewedParams
+    );
+    notViewedTotal = notViewedCount;
+    
+    // Get paginated not viewed data
     [notViewedStudents] = await pool.query(
       `SELECT u.id, u.full_name AS student_name, u.username,
               c.name AS class_name,
@@ -2257,8 +2296,9 @@ router.get('/material-views', async (req, res) => {
            JOIN materials m ON m.id=mv.material_id
            WHERE mv.student_id=u.id AND m.teacher_id=:tid
          )
-       ORDER BY u.full_name ASC;`,
-      notViewedParams
+       ORDER BY u.full_name ASC
+       LIMIT :limit OFFSET :offset;`,
+      { ...notViewedParams, limit: notViewedLimit, offset: notViewedOffset }
     );
   }
 
@@ -2268,13 +2308,19 @@ router.get('/material-views', async (req, res) => {
     materials,
     classes,
     filters: { material_id, class_id, q },
-    notViewedCount: notViewedStudents.length,
+    notViewedCount: notViewedTotal,
     notViewedStudents,
     pagination: {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit)
+    },
+    notViewedPagination: {
+      page: notViewedPage,
+      limit: notViewedLimit,
+      total: notViewedTotal,
+      totalPages: Math.ceil(notViewedTotal / notViewedLimit)
     }
   });
 });

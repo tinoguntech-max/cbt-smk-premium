@@ -7,9 +7,17 @@
     <h1 class="mt-1 text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Kelola Notifikasi</h1>
     <p class="mt-1 text-slate-600">Kirim peringatan atau pengumuman ke siswa</p>
   </div>
-  <a href="/notifications/new" class="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
-    ➕ Buat Notifikasi
-  </a>
+  <div class="flex gap-2">
+    <a href="/notifications/new" class="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+      ➕ Buat Notifikasi
+    </a>
+    <a href="/teacher" class="inline-flex items-center gap-2 px-4 py-3 bg-orange-100/80 backdrop-blur-sm hover:bg-orange-200/90 text-orange-800 font-bold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 rounded-xl">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Kembali
+    </a>
+  </div>
 </div>
 
 <% if (notifications.length === 0) { %>
