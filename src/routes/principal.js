@@ -377,20 +377,25 @@ router.get('/reports', async (req, res) => {
       SELECT 
         c.id, c.name as class_name,
         COUNT(DISTINCT u.id) as total_students,
-        COUNT(DISTINCT at.id) as total_attempts,
+        COUNT(DISTINCT at.id) as total_exams,
+        COUNT(DISTINCT asub.id) as total_assignments,
+        COUNT(DISTINCT mr.id) as total_material_reads,
         COALESCE(AVG(at.score), 0) as avg_score,
+        (COUNT(DISTINCT at.id) + COUNT(DISTINCT asub.id) + COUNT(DISTINCT mr.id)) as total_activities,
         CASE 
           WHEN COUNT(DISTINCT u.id) > 0 THEN 
-            ROUND((COUNT(DISTINCT at.student_id) / COUNT(DISTINCT u.id)) * 100)
+            ROUND(((COUNT(DISTINCT at.student_id) + COUNT(DISTINCT asub.student_id) + COUNT(DISTINCT mr.student_id)) / (COUNT(DISTINCT u.id) * 3)) * 100)
           ELSE 0 
         END as participation_rate
       FROM classes c
-      LEFT JOIN users u ON u.class_id = c.id AND u.role = 'STUDENT' AND u.is_active = 1
+      LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student' AND u.is_active = 1
       LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at BETWEEN ? AND ?
+      LEFT JOIN assignment_submissions asub ON asub.student_id = u.id AND asub.submitted_at BETWEEN ? AND ?
+      LEFT JOIN material_reads mr ON mr.student_id = u.id AND mr.created_at BETWEEN ? AND ?
       GROUP BY c.id, c.name
       HAVING total_students > 0
-      ORDER BY participation_rate DESC, total_attempts DESC, c.name ASC
-    `, [startDate, endDate]);
+      ORDER BY total_activities DESC, participation_rate DESC, c.name ASC
+    `, [startDate, endDate, startDate, endDate, startDate, endDate]);
 
     // Convert avg_score to numbers
     const activeClasses = activeClassesRaw.map(cls => ({
@@ -476,12 +481,15 @@ router.get('/reports', async (req, res) => {
 
       // Active classes sheet
       const classesData = [
-        ['Ranking', 'Nama Kelas', 'Total Siswa', 'Total Ujian', 'Rata-rata Nilai', 'Partisipasi (%)'],
+        ['Ranking', 'Nama Kelas', 'Total Siswa', 'Total Ujian', 'Total Tugas', 'Total Baca Materi', 'Total Aktivitas', 'Rata-rata Nilai', 'Partisipasi (%)'],
         ...activeClasses.map((classData, index) => [
           index + 1,
           classData.class_name,
           classData.total_students,
-          classData.total_attempts,
+          classData.total_exams,
+          classData.total_assignments,
+          classData.total_material_reads,
+          classData.total_activities,
           classData.avg_score.toFixed(2),
           classData.participation_rate
         ])

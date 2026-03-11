@@ -202,7 +202,13 @@
             <div>
               <div class="font-semibold text-purple-900"><%= classData.class_name %></div>
               <div class="text-xs text-purple-600">
-                <%= classData.total_students %> siswa • <%= classData.total_attempts %> ujian • <%= classData.avg_score.toFixed(1) %> rata-rata
+                <%= classData.total_students %> siswa • 
+                <%= classData.total_exams %> ujian • 
+                <%= classData.total_assignments %> tugas • 
+                <%= classData.total_material_reads %> baca materi
+              </div>
+              <div class="text-xs text-purple-500 mt-1">
+                Total <%= classData.total_activities %> aktivitas • Rata-rata <%= classData.avg_score.toFixed(1) %>
               </div>
             </div>
           </div>
