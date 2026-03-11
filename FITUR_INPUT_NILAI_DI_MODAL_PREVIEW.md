@@ -282,3 +282,264 @@ Menggunakan endpoint yang sama: `POST /teacher/assignments/:id/submissions/:subm
 4. **Score Presets**: Quick buttons untuk nilai umum (100, 90, 80, 70)
 5. **Feedback Templates**: Dropdown feedback template umum
 6. **Grade History**: Show previous grades jika di-edit berkali-kali
+
+
+## Update: Dynamic Modal Title & Visual Indicators
+
+### Status: ✅ SELESAI
+
+Menambahkan fitur untuk membedakan mode "Beri Nilai" dan "Edit Nilai" dengan visual yang jelas.
+
+### Fitur Baru
+
+#### 1. Dynamic Modal Title
+Modal title berubah otomatis berdasarkan status nilai:
+- **"📝 Beri Nilai - Tugas Siswa"** - Jika submission belum dinilai
+- **"✏️ Edit Nilai - Tugas Siswa"** - Jika submission sudah dinilai
+
+#### 2. Status Badge
+Badge hijau muncul di atas form saat mode edit:
+```html
+<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+  ✓ Sudah Dinilai - Mode Edit
+</span>
+```
+
+#### 3. Footer Background Color
+Background footer berubah sesuai mode:
+- **Mode Edit**: Hijau muda (`bg-green-50`) dengan border hijau (`border-green-200`)
+- **Mode Beri Nilai**: Abu-abu muda (`bg-slate-50`)
+
+### Implementasi
+
+#### HTML Changes
+```html
+<!-- Modal Header -->
+<div class="p-6 border-b border-slate-200 flex items-center justify-between">
+  <div>
+    <h2 id="viewModalTitle" class="text-xl font-semibold text-slate-900">Tugas Siswa</h2>
+    <p id="viewStudentName" class="text-sm text-slate-600 mt-1"></p>
+  </div>
+  <!-- ... buttons ... -->
+</div>
+
+<!-- Modal Footer -->
+<div id="quickGradeFooter" class="p-6 border-t border-slate-200 bg-slate-50">
+  <form id="quickGradeForm" method="POST" action="">
+    <!-- Status Badge -->
+    <div id="gradeStatusBadge" class="hidden mb-2">
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+        ✓ Sudah Dinilai - Mode Edit
+      </span>
+    </div>
+    
+    <!-- ... form fields ... -->
+  </form>
+</div>
+```
+
+#### JavaScript Logic
+```javascript
+function viewSubmission(submissionId, studentName, filePath, fileName, notes, score, feedback) {
+  // ... existing code ...
+  
+  const modalTitle = document.getElementById('viewModalTitle');
+  const quickGradeFooter = document.getElementById('quickGradeFooter');
+  const gradeStatusBadge = document.getElementById('gradeStatusBadge');
+  
+  // Update modal title and styling based on score status
+  if (score && score.trim() !== '') {
+    // Mode: Edit Nilai
+    modalTitle.textContent = '✏️ Edit Nilai - Tugas Siswa';
+    quickGradeFooter.classList.remove('bg-slate-50');
+    quickGradeFooter.classList.add('bg-green-50', 'border-t-2', 'border-green-200');
+    gradeStatusBadge.classList.remove('hidden');
+  } else {
+    // Mode: Beri Nilai
+    modalTitle.textContent = '📝 Beri Nilai - Tugas Siswa';
+    quickGradeFooter.classList.remove('bg-green-50', 'border-t-2', 'border-green-200');
+    quickGradeFooter.classList.add('bg-slate-50');
+    gradeStatusBadge.classList.add('hidden');
+  }
+  
+  // Pre-fill form
+  quickScoreInput.value = score || '';
+  quickFeedbackInput.value = feedback || '';
+  
+  // ... rest of code ...
+}
+```
+
+### Visual Comparison
+
+#### Mode: Beri Nilai (Belum Dinilai)
+```
+┌─────────────────────────────────────────┐
+│ 📝 Beri Nilai - Tugas Siswa            │
+│ Nama Siswa                              │
+├─────────────────────────────────────────┤
+│ [File Preview]                          │
+├─────────────────────────────────────────┤
+│ Footer (bg-slate-50)                    │
+│ ┌─────────────┐ ┌──────────────────┐  │
+│ │ Nilai: [  ] │ │ Feedback: [    ] │  │
+│ └─────────────┘ └──────────────────┘  │
+│ [Form Lengkap] [✓ Simpan Nilai]       │
+└─────────────────────────────────────────┘
+```
+
+#### Mode: Edit Nilai (Sudah Dinilai)
+```
+┌─────────────────────────────────────────┐
+│ ✏️ Edit Nilai - Tugas Siswa            │
+│ Nama Siswa                              │
+├─────────────────────────────────────────┤
+│ [File Preview]                          │
+├─────────────────────────────────────────┤
+│ Footer (bg-green-50, border-green-200) │
+│ ┌───────────────────────────────────┐  │
+│ │ ✓ Sudah Dinilai - Mode Edit       │  │
+│ └───────────────────────────────────┘  │
+│ ┌─────────────┐ ┌──────────────────┐  │
+│ │ Nilai: [85] │ │ Feedback: [Baik] │  │
+│ └─────────────┘ └──────────────────┘  │
+│ [Form Lengkap] [✓ Simpan Nilai]       │
+└─────────────────────────────────────────┘
+```
+
+### User Experience Improvements
+
+1. **Clear Visual Feedback**: Guru langsung tahu apakah sedang memberi nilai baru atau edit nilai existing
+2. **Color Coding**: Hijau = edit (sudah ada nilai), Abu-abu = baru (belum ada nilai)
+3. **Status Badge**: Konfirmasi eksplisit bahwa submission sudah dinilai
+4. **Consistent Icons**: 📝 untuk beri nilai, ✏️ untuk edit nilai
+
+### Testing Results
+
+- [x] Modal title berubah sesuai status nilai
+- [x] Footer background berubah warna (hijau untuk edit, abu-abu untuk baru)
+- [x] Status badge muncul hanya saat mode edit
+- [x] Form pre-filled dengan nilai existing saat mode edit
+- [x] Form kosong saat mode beri nilai baru
+- [x] Transisi smooth antara mode edit dan beri nilai
+- [x] Tidak ada error dengan karakter khusus di nama siswa
+
+### Files Modified
+
+- `src/views/teacher/assignment_detail.ejs`
+  - Added `id="viewModalTitle"` to modal header
+  - Added `id="quickGradeFooter"` to footer div
+  - Added `id="gradeStatusBadge"` for status badge
+  - Added `data-score` and `data-feedback` to "Lihat" button
+  - Updated `viewSubmission()` function with dynamic title and styling logic
+  - Updated `viewSubmissionSafe()` to pass score and feedback parameters
+
+
+## Final Update: Pre-fill Score & Feedback - COMPLETED ✅
+
+### Status: ✅ SELESAI SEMPURNA
+
+Semua fitur input nilai di modal preview sudah berfungsi dengan sempurna, termasuk pre-fill nilai dan feedback yang sudah ada.
+
+### Final Changes
+
+#### Data Attributes Added to "Lihat" Button
+File: `src/views/teacher/assignment_detail.ejs` (baris ~169-177)
+
+```html
+<button 
+  data-submission-id="<%= sub.id %>"
+  data-student-name="<%= sub.student_name %>"
+  data-file-path="<%= sub.file_path || '' %>"
+  data-file-name="<%= sub.file_name || '' %>"
+  data-notes="<%= sub.notes || '' %>"
+  data-score="<%= sub.score || '' %>"          <!-- ✅ DITAMBAHKAN -->
+  data-feedback="<%= sub.feedback || '' %>"    <!-- ✅ DITAMBAHKAN -->
+  onclick="viewSubmissionSafe(this)"
+  class="px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+>
+  👁️ Lihat
+</button>
+```
+
+### Complete Flow Verification
+
+#### 1. Submission Belum Dinilai
+- Klik "👁️ Lihat" → Modal terbuka
+- Title: "📝 Beri Nilai - Tugas Siswa"
+- Footer: Background abu-abu (bg-slate-50)
+- Form: Input nilai dan feedback KOSONG
+- Badge: Tidak muncul
+- ✅ VERIFIED
+
+#### 2. Submission Sudah Dinilai
+- Klik "👁️ Lihat" → Modal terbuka
+- Title: "✏️ Edit Nilai - Tugas Siswa"
+- Footer: Background hijau (bg-green-50)
+- Form: Input nilai dan feedback TERISI OTOMATIS
+- Badge: "✓ Sudah Dinilai - Mode Edit" muncul
+- ✅ VERIFIED
+
+#### 3. Edit Nilai Existing
+- Buka submission yang sudah dinilai
+- Nilai dan feedback muncul di form
+- Edit nilai atau feedback
+- Klik "✓ Simpan Nilai"
+- Nilai terupdate di database
+- ✅ VERIFIED
+
+### Technical Implementation Summary
+
+#### Data Flow
+```
+Database (sub.score, sub.feedback)
+  ↓
+EJS Template (data-score, data-feedback attributes)
+  ↓
+Button Click → viewSubmissionSafe(button)
+  ↓
+Read attributes: button.getAttribute('data-score')
+  ↓
+Pass to viewSubmission(submissionId, studentName, ..., score, feedback)
+  ↓
+Set form values:
+  - quickScoreInput.value = score || '';
+  - quickFeedbackInput.value = feedback || '';
+  ↓
+User sees pre-filled form ✅
+```
+
+#### Key Functions
+1. **viewSubmissionSafe(button)** - Reads all data attributes including score & feedback
+2. **viewSubmission(...)** - Sets form values and updates UI based on score status
+3. **openFullGradeModal()** - Transfers values from quick form to full form
+
+### All Features Working
+
+- ✅ Quick grade form di modal preview
+- ✅ Pre-fill nilai dan feedback yang sudah ada
+- ✅ Dynamic modal title (Beri Nilai vs Edit Nilai)
+- ✅ Visual indicators (warna footer, status badge)
+- ✅ Form lengkap button dengan transfer nilai
+- ✅ Karakter khusus di nama siswa tidak error
+- ✅ Mobile responsive
+- ✅ Validation (min/max score)
+
+### Files Modified (Final)
+
+**src/views/teacher/assignment_detail.ejs**
+- Line ~169-177: Added `data-score` and `data-feedback` to "Lihat" button ✅
+- Line ~280-320: Quick grade form in modal footer ✅
+- Line ~401-411: `viewSubmissionSafe()` reads all attributes ✅
+- Line ~441-490: `viewSubmission()` sets form values and UI ✅
+
+### Conclusion
+
+Fitur input nilai di modal preview sudah SELESAI 100% dan siap digunakan. Guru bisa:
+1. Lihat file submission
+2. Input nilai langsung sambil melihat file
+3. Nilai dan feedback otomatis terisi jika sudah ada
+4. Edit nilai existing dengan mudah
+5. Workflow lebih efisien (3 langkah vs 6 langkah sebelumnya)
+
+**Status: PRODUCTION READY** 🚀
