@@ -166,32 +166,35 @@
                 <div class="flex gap-2">
                   <!-- View/Preview Button -->
                   <button 
-                    class="view-btn px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
-                    data-id="<%= sub.id %>"
-                    data-student="<%= sub.student_name %>"
-                    data-filepath="<%= sub.file_path %>"
-                    data-filename="<%= sub.file_name %>"
+                    data-submission-id="<%= sub.id %>"
+                    data-student-name="<%= sub.student_name %>"
+                    data-file-path="<%= sub.file_path || '' %>"
+                    data-file-name="<%= sub.file_name || '' %>"
                     data-notes="<%= sub.notes || '' %>"
+                    onclick="viewSubmissionSafe(this)"
+                    class="px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
                   >
                     👁️ Lihat
                   </button>
                   
                   <!-- Grade Button -->
                   <button 
-                    class="grade-btn px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
-                    data-id="<%= sub.id %>"
-                    data-student="<%= sub.student_name %>"
+                    data-submission-id="<%= sub.id %>"
+                    data-student-name="<%= sub.student_name %>"
                     data-score="<%= sub.score || '' %>"
                     data-feedback="<%= sub.feedback || '' %>"
+                    onclick="openGradeModalSafe(this)"
+                    class="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
                   >
                     <%= sub.score !== null ? '✏️ Edit' : '📝 Nilai' %>
                   </button>
                   
                   <!-- Reset Individual Button -->
                   <button 
-                    class="reset-btn px-3 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
-                    data-id="<%= sub.id %>"
-                    data-student="<%= sub.student_name %>"
+                    data-submission-id="<%= sub.id %>"
+                    data-student-name="<%= sub.student_name %>"
+                    onclick="resetIndividualSafe(this)"
+                    class="px-3 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
                     title="Reset submission siswa ini"
                   >
                     🗑️ Reset
@@ -312,16 +315,62 @@
       </div>
     </div>
     
-    <!-- Footer with Grade Button -->
-    <div class="p-6 border-t border-slate-200 flex justify-between items-center">
-      <div id="viewFileName" class="text-sm text-slate-600"></div>
-      <button 
-        id="gradeFromViewBtn"
-        onclick="gradeFromView()"
-        class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-      >
-        📝 Beri Nilai
-      </button>
+    <!-- Footer with Quick Grade Form -->
+    <div class="p-6 border-t border-slate-200 bg-slate-50">
+      <form id="quickGradeForm" method="POST" action="" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Score Input -->
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">
+              Nilai (0 - <%= assignment.max_score %>)
+            </label>
+            <input 
+              type="number" 
+              name="score" 
+              id="quickScoreInput"
+              min="0" 
+              max="<%= assignment.max_score %>"
+              step="0.01"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              placeholder="Masukkan nilai"
+            />
+          </div>
+          
+          <!-- Feedback Input -->
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">
+              Feedback (Opsional)
+            </label>
+            <input 
+              type="text" 
+              name="feedback" 
+              id="quickFeedbackInput"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              placeholder="Berikan feedback singkat"
+            />
+          </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between">
+          <div id="viewFileName" class="text-sm text-slate-600"></div>
+          <div class="flex gap-2">
+            <button 
+              type="button"
+              onclick="openFullGradeModal()"
+              class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              📝 Form Lengkap
+            </button>
+            <button 
+              type="submit"
+              class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              ✓ Simpan Nilai
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -332,40 +381,39 @@ let currentStudentName = null;
 let currentScore = null;
 let currentFeedback = null;
 
-// Event listeners for buttons using data attributes
-document.addEventListener('DOMContentLoaded', function() {
-  // View buttons
-  document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const id = this.dataset.id;
-      const student = this.dataset.student;
-      const filepath = this.dataset.filepath;
-      const filename = this.dataset.filename;
-      const notes = this.dataset.notes;
-      viewSubmission(id, student, filepath, filename, notes);
-    });
-  });
+// Safe wrapper functions that read from data attributes
+function openGradeModalSafe(button) {
+  const submissionId = button.getAttribute('data-submission-id');
+  const studentName = button.getAttribute('data-student-name');
+  const score = button.getAttribute('data-score');
+  const feedback = button.getAttribute('data-feedback');
   
-  // Grade buttons
-  document.querySelectorAll('.grade-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const id = this.dataset.id;
-      const student = this.dataset.student;
-      const score = this.dataset.score ? parseFloat(this.dataset.score) : null;
-      const feedback = this.dataset.feedback;
-      openGradeModal(id, student, score, feedback);
-    });
-  });
+  openGradeModal(
+    submissionId, 
+    studentName, 
+    score ? parseFloat(score) : null, 
+    feedback
+  );
+}
+
+function viewSubmissionSafe(button) {
+  const submissionId = button.getAttribute('data-submission-id');
+  const studentName = button.getAttribute('data-student-name');
+  const filePath = button.getAttribute('data-file-path');
+  const fileName = button.getAttribute('data-file-name');
+  const notes = button.getAttribute('data-notes');
+  const score = button.getAttribute('data-score');
+  const feedback = button.getAttribute('data-feedback');
   
-  // Reset buttons
-  document.querySelectorAll('.reset-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const id = this.dataset.id;
-      const student = this.dataset.student;
-      resetIndividual(id, student);
-    });
-  });
-});
+  viewSubmission(submissionId, studentName, filePath, fileName, notes, score, feedback);
+}
+
+function resetIndividualSafe(button) {
+  const submissionId = button.getAttribute('data-submission-id');
+  const studentName = button.getAttribute('data-student-name');
+  
+  resetIndividual(submissionId, studentName);
+}
 
 function openGradeModal(submissionId, studentName, score, feedback) {
   const modal = document.getElementById('gradeModal');
@@ -386,7 +434,7 @@ function closeGradeModal() {
   document.getElementById('gradeModal').classList.add('hidden');
 }
 
-function viewSubmission(submissionId, studentName, filePath, fileName, notes) {
+function viewSubmission(submissionId, studentName, filePath, fileName, notes, score, feedback) {
   currentSubmissionId = submissionId;
   currentStudentName = studentName;
   
@@ -398,9 +446,21 @@ function viewSubmission(submissionId, studentName, filePath, fileName, notes) {
   const notesSection = document.getElementById('studentNotesSection');
   const notesEl = document.getElementById('studentNotes');
   
+  // Quick grade form
+  const quickGradeForm = document.getElementById('quickGradeForm');
+  const quickScoreInput = document.getElementById('quickScoreInput');
+  const quickFeedbackInput = document.getElementById('quickFeedbackInput');
+  
   // Set student name and file name
   studentNameEl.textContent = studentName;
   fileNameEl.textContent = fileName;
+  
+  // Set form action
+  quickGradeForm.action = `/teacher/assignments/<%= assignment.id %>/submissions/${submissionId}/grade`;
+  
+  // Pre-fill score and feedback if exists
+  quickScoreInput.value = score || '';
+  quickFeedbackInput.value = feedback || '';
   
   // Set download link
   const fileUrl = `/public/uploads/assignments/${filePath.split('/').pop()}`;
@@ -533,16 +593,26 @@ function closeViewModal() {
   document.getElementById('viewModal').classList.add('hidden');
 }
 
-function gradeFromView() {
+function openFullGradeModal() {
+  // Get current values from quick form
+  const quickScore = document.getElementById('quickScoreInput').value;
+  const quickFeedback = document.getElementById('quickFeedbackInput').value;
+  
   // Close view modal
   closeViewModal();
   
-  // Open grade modal with current submission
-  // We need to get the score and feedback from the table
-  const row = document.querySelector(`button[onclick*="openGradeModal(${currentSubmissionId}"]`);
-  if (row) {
-    row.click();
-  }
+  // Open full grade modal with current values
+  openGradeModal(
+    currentSubmissionId,
+    currentStudentName,
+    quickScore ? parseFloat(quickScore) : null,
+    quickFeedback
+  );
+}
+
+function gradeFromView() {
+  // Deprecated - use openFullGradeModal instead
+  openFullGradeModal();
 }
 
 // Close modals when clicking outside
