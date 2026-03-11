@@ -567,9 +567,10 @@ router.get('/assignments', async (req, res) => {
        FROM assignments a
        JOIN subjects s ON s.id = a.subject_id
        JOIN users u ON u.id = a.teacher_id
+       INNER JOIN assignment_classes ac ON ac.assignment_id = a.id
        LEFT JOIN assignment_submissions sub ON sub.assignment_id = a.id AND sub.student_id = :studentId
        WHERE a.is_published = 1
-         AND (a.class_id IS NULL OR a.class_id = :classId)
+         AND ac.class_id = :classId
        ORDER BY a.due_date ASC, a.created_at DESC;`,
       { studentId: user.id, classId: user.class_id || 0 }
     );

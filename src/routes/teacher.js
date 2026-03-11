@@ -2436,15 +2436,21 @@ router.get('/assignments', async (req, res) => {
     const [assignments] = await pool.query(
       `SELECT 
         a.id, a.title, a.description, a.due_date, a.max_score, 
-        a.is_published, a.created_at, a.class_id,
+        a.is_published, a.created_at,
         s.name AS subject_name,
-        c.name AS class_name,
-        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count,
-        (SELECT COUNT(*) FROM users WHERE role = 'student' AND (a.class_id IS NULL OR class_id = a.class_id)) AS total_students
+        GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS class_names,
+        COUNT(DISTINCT ac.class_id) AS class_count,
+        (SELECT COUNT(*) FROM assignment_submissions asub WHERE asub.assignment_id = a.id) AS submission_count,
+        (SELECT COUNT(DISTINCT u.id) 
+         FROM users u 
+         INNER JOIN assignment_classes ac2 ON ac2.class_id = u.class_id 
+         WHERE ac2.assignment_id = a.id AND u.role = 'student' AND u.is_active = 1) AS total_students
        FROM assignments a
        LEFT JOIN subjects s ON s.id = a.subject_id
-       LEFT JOIN classes c ON c.id = a.class_id
+       LEFT JOIN assignment_classes ac ON ac.assignment_id = a.id
+       LEFT JOIN classes c ON c.id = ac.class_id
        WHERE a.teacher_id = :teacherId
+       GROUP BY a.id, a.title, a.description, a.due_date, a.max_score, a.is_published, a.created_at, s.name
        ORDER BY a.created_at DESC;`,
       { teacherId }
     );
@@ -2487,32 +2493,44 @@ router.get('/assignments/new', async (req, res) => {
 
 // Create assignment
 router.post('/assignments', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+    
     const teacherId = req.session.user.id;
-    const { subject_id, title, description, class_id, due_date, max_score, allow_late_submission, is_published } = req.body;
+    const { subject_id, title, description, class_ids, due_date, max_score, allow_late_submission, is_published } = req.body;
+    
+    // Validate class_ids
+    if (!class_ids || (Array.isArray(class_ids) && class_ids.length === 0)) {
+      req.flash('error', 'Pilih minimal 1 kelas untuk tugas ini');
+      return res.redirect('/teacher/assignments/new');
+    }
+    
+    // Ensure class_ids is array
+    const classIdsArray = Array.isArray(class_ids) ? class_ids : [class_ids];
     
     // Debug logging
     console.log('Creating assignment with data:', {
       subject_id,
       teacher_id: teacherId,
       title,
-      class_id,
+      class_ids: classIdsArray,
       due_date,
       max_score,
       allow_late_submission,
       is_published
     });
     
-    const [result] = await pool.query(
+    // Insert assignment (without class_id for now, keep for backward compatibility)
+    const [result] = await connection.query(
       `INSERT INTO assignments 
        (subject_id, teacher_id, title, description, class_id, due_date, max_score, allow_late_submission, is_published)
-       VALUES (:subject_id, :teacher_id, :title, :description, :class_id, :due_date, :max_score, :allow_late, :is_published);`,
+       VALUES (:subject_id, :teacher_id, :title, :description, NULL, :due_date, :max_score, :allow_late, :is_published);`,
       {
         subject_id: subject_id || null,
         teacher_id: teacherId,
         title,
         description: description || null,
-        class_id: class_id || null,
         due_date: due_date || null,
         max_score: max_score || 100,
         allow_late: allow_late_submission ? 1 : 0,
@@ -2520,29 +2538,43 @@ router.post('/assignments', async (req, res) => {
       }
     );
     
-    console.log('Assignment created successfully, ID:', result.insertId);
+    const assignmentId = result.insertId;
+    console.log('Assignment created successfully, ID:', assignmentId);
+    
+    // Insert into assignment_classes junction table
+    for (const classId of classIdsArray) {
+      await connection.query(
+        `INSERT INTO assignment_classes (assignment_id, class_id) VALUES (?, ?)`,
+        [assignmentId, classId]
+      );
+    }
+    console.log('Assignment linked to', classIdsArray.length, 'classes');
     
     // Send notification if published
-    if (is_published && class_id) {
+    if (is_published) {
       try {
-        console.log('Sending notification to class:', class_id);
-        await createNotificationForClass(
-          class_id,
-          'ASSIGNMENT',
-          `Tugas Baru: ${title}`,
-          `Guru telah memberikan tugas baru. Deadline: ${due_date ? new Date(due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
-          result.insertId
-        );
-        console.log('Notification sent successfully');
+        for (const classId of classIdsArray) {
+          console.log('Sending notification to class:', classId);
+          await createNotificationForClass(
+            classId,
+            'ASSIGNMENT',
+            `Tugas Baru: ${title}`,
+            `Guru telah memberikan tugas baru. Deadline: ${due_date ? new Date(due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
+            assignmentId
+          );
+        }
+        console.log('Notifications sent successfully');
       } catch (notifErr) {
         console.error('Error sending notification:', notifErr);
         // Don't fail the whole operation if notification fails
       }
     }
     
-    req.flash('success', 'Tugas berhasil dibuat');
+    await connection.commit();
+    req.flash('success', `Tugas berhasil dibuat untuk ${classIdsArray.length} kelas`);
     res.redirect('/teacher/assignments');
   } catch (err) {
+    await connection.rollback();
     console.error('Error creating assignment:', err);
     console.error('Error details:', {
       message: err.message,
@@ -2551,6 +2583,8 @@ router.post('/assignments', async (req, res) => {
     });
     req.flash('error', `Gagal membuat tugas: ${err.message}`);
     res.redirect('/teacher/assignments/new');
+  } finally {
+    connection.release();
   }
 });
 
@@ -2634,6 +2668,13 @@ router.get('/assignments/:id/edit', async (req, res) => {
       return res.redirect('/teacher/assignments');
     }
     
+    // Get selected classes for this assignment
+    const [selectedClasses] = await pool.query(
+      `SELECT class_id FROM assignment_classes WHERE assignment_id = ?`,
+      [assignmentId]
+    );
+    assignment.selected_class_ids = selectedClasses.map(sc => sc.class_id);
+    
     const [subjects] = await pool.query(`SELECT id, code, name FROM subjects ORDER BY name ASC;`);
     const [classes] = await pool.query(`SELECT id, code, name FROM classes ORDER BY name ASC;`);
     
@@ -2652,13 +2693,25 @@ router.get('/assignments/:id/edit', async (req, res) => {
 
 // Update assignment
 router.post('/assignments/:id/update', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+    
     const teacherId = req.session.user.id;
     const assignmentId = req.params.id;
-    const { subject_id, title, description, class_id, due_date, max_score, allow_late_submission, is_published } = req.body;
+    const { subject_id, title, description, class_ids, due_date, max_score, allow_late_submission, is_published } = req.body;
+    
+    // Validate class_ids
+    if (!class_ids || (Array.isArray(class_ids) && class_ids.length === 0)) {
+      req.flash('error', 'Pilih minimal 1 kelas untuk tugas ini');
+      return res.redirect(`/teacher/assignments/${assignmentId}/edit`);
+    }
+    
+    // Ensure class_ids is array
+    const classIdsArray = Array.isArray(class_ids) ? class_ids : [class_ids];
     
     // Verify ownership
-    const [[existing]] = await pool.query(
+    const [[existing]] = await connection.query(
       `SELECT id FROM assignments WHERE id = :id AND teacher_id = :teacherId;`,
       { id: assignmentId, teacherId }
     );
@@ -2668,12 +2721,12 @@ router.post('/assignments/:id/update', async (req, res) => {
       return res.redirect('/teacher/assignments');
     }
     
-    await pool.query(
+    // Update assignment
+    await connection.query(
       `UPDATE assignments 
        SET subject_id = :subject_id,
            title = :title,
            description = :description,
-           class_id = :class_id,
            due_date = :due_date,
            max_score = :max_score,
            allow_late_submission = :allow_late,
@@ -2683,7 +2736,6 @@ router.post('/assignments/:id/update', async (req, res) => {
         subject_id: subject_id || null,
         title,
         description: description || null,
-        class_id: class_id || null,
         due_date: due_date || null,
         max_score: max_score || 100,
         allow_late: allow_late_submission ? 1 : 0,
@@ -2693,12 +2745,30 @@ router.post('/assignments/:id/update', async (req, res) => {
       }
     );
     
-    req.flash('success', 'Tugas berhasil diperbarui');
+    // Delete existing class assignments
+    await connection.query(
+      `DELETE FROM assignment_classes WHERE assignment_id = ?`,
+      [assignmentId]
+    );
+    
+    // Insert new class assignments
+    for (const classId of classIdsArray) {
+      await connection.query(
+        `INSERT INTO assignment_classes (assignment_id, class_id) VALUES (?, ?)`,
+        [assignmentId, classId]
+      );
+    }
+    
+    await connection.commit();
+    req.flash('success', `Tugas berhasil diperbarui untuk ${classIdsArray.length} kelas`);
     res.redirect('/teacher/assignments');
   } catch (err) {
+    await connection.rollback();
     console.error('Error updating assignment:', err);
     req.flash('error', 'Gagal memperbarui tugas');
     res.redirect(`/teacher/assignments/${req.params.id}/edit`);
+  } finally {
+    connection.release();
   }
 });
 

@@ -242,7 +242,7 @@ router.get('/reports', async (req, res) => {
       FROM classes c
       LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student' AND u.is_active = 1
       LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at BETWEEN :startDate AND :endDate
-      LEFT JOIN assignment_submissions asub ON asub.student_id = u.id AND asub.submitted_at BETWEEN :startDate AND :endDate
+      LEFT JOIN assignment_submissions asub ON asub.student_id = u.id AND asub.created_at BETWEEN :startDate AND :endDate
       LEFT JOIN material_reads mr ON mr.student_id = u.id AND mr.created_at BETWEEN :startDate AND :endDate
       GROUP BY c.id, c.name
       HAVING total_students > 0
