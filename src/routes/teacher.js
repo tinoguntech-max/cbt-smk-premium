@@ -2436,10 +2436,11 @@ router.get('/assignments', async (req, res) => {
     const [assignments] = await pool.query(
       `SELECT 
         a.id, a.title, a.description, a.due_date, a.max_score, 
-        a.is_published, a.created_at,
+        a.is_published, a.created_at, a.class_id,
         s.name AS subject_name,
         c.name AS class_name,
-        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count
+        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) AS submission_count,
+        (SELECT COUNT(*) FROM users WHERE role = 'student' AND (a.class_id IS NULL OR class_id = a.class_id)) AS total_students
        FROM assignments a
        LEFT JOIN subjects s ON s.id = a.subject_id
        LEFT JOIN classes c ON c.id = a.class_id
@@ -2447,6 +2448,13 @@ router.get('/assignments', async (req, res) => {
        ORDER BY a.created_at DESC;`,
       { teacherId }
     );
+    
+    // Calculate percentage for each assignment
+    assignments.forEach(a => {
+      a.submission_percentage = a.total_students > 0 
+        ? Math.round((a.submission_count / a.total_students) * 100) 
+        : 0;
+    });
     
     res.render('teacher/assignments', {
       title: 'Tugas Saya',
@@ -2583,6 +2591,21 @@ router.get('/assignments/:id', async (req, res) => {
       { assignmentId }
     );
     
+    // Calculate total students and percentage
+    const [[totalStudents]] = await pool.query(
+      `SELECT COUNT(*) as total 
+       FROM users 
+       WHERE role = 'student' 
+       AND (${assignment.class_id ? 'class_id = :classId' : '1=1'});`,
+      { classId: assignment.class_id }
+    );
+    
+    assignment.total_students = totalStudents.total || 0;
+    assignment.submission_count = submissions.length;
+    assignment.submission_percentage = assignment.total_students > 0 
+      ? Math.round((assignment.submission_count / assignment.total_students) * 100) 
+      : 0;
+    
     res.render('teacher/assignment_detail', {
       title: assignment.title,
       assignment,
@@ -2702,6 +2725,108 @@ router.post('/assignments/:id/submissions/:submissionId/grade', async (req, res)
   } catch (err) {
     console.error('Error grading submission:', err);
     req.flash('error', 'Gagal menyimpan nilai');
+    res.redirect(`/teacher/assignments/${req.params.id}`);
+  }
+});
+
+// Reset individual submission
+router.post('/assignments/submissions/:submissionId/reset', async (req, res) => {
+  try {
+    const teacherId = req.session.user.id;
+    const submissionId = req.params.submissionId;
+    
+    // Verify ownership
+    const [[submission]] = await pool.query(
+      `SELECT sub.*, a.teacher_id, a.id as assignment_id
+       FROM assignment_submissions sub
+       JOIN assignments a ON a.id = sub.assignment_id
+       WHERE sub.id = :submissionId AND a.teacher_id = :teacherId;`,
+      { submissionId, teacherId }
+    );
+    
+    if (!submission) {
+      req.flash('error', 'Submission tidak ditemukan atau Anda tidak memiliki akses');
+      return res.redirect('/teacher/assignments');
+    }
+    
+    // Delete file if exists
+    if (submission.file_path) {
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = path.join(__dirname, '..', '..', submission.file_path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    
+    // Delete submission
+    await pool.query(
+      `DELETE FROM assignment_submissions WHERE id = :submissionId;`,
+      { submissionId }
+    );
+    
+    req.flash('success', 'Submission berhasil direset');
+    res.redirect(`/teacher/assignments/${submission.assignment_id}`);
+  } catch (err) {
+    console.error('Error resetting submission:', err);
+    req.flash('error', 'Gagal mereset submission');
+    res.redirect('/teacher/assignments');
+  }
+});
+
+// Reset all submissions for an assignment
+router.post('/assignments/:id/reset-all', async (req, res) => {
+  try {
+    const teacherId = req.session.user.id;
+    const assignmentId = req.params.id;
+    
+    // Verify ownership
+    const [[assignment]] = await pool.query(
+      `SELECT * FROM assignments WHERE id = :id AND teacher_id = :teacherId;`,
+      { id: assignmentId, teacherId }
+    );
+    
+    if (!assignment) {
+      req.flash('error', 'Tugas tidak ditemukan');
+      return res.redirect('/teacher/assignments');
+    }
+    
+    // Get all submissions to delete files
+    const [submissions] = await pool.query(
+      `SELECT file_path FROM assignment_submissions WHERE assignment_id = :assignmentId AND file_path IS NOT NULL;`,
+      { assignmentId }
+    );
+    
+    // Delete all files
+    const fs = require('fs');
+    const path = require('path');
+    let deletedFiles = 0;
+    
+    for (const sub of submissions) {
+      if (sub.file_path) {
+        const filePath = path.join(__dirname, '..', '..', sub.file_path);
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            deletedFiles++;
+          }
+        } catch (fileErr) {
+          console.error('Error deleting file:', fileErr);
+        }
+      }
+    }
+    
+    // Delete all submissions
+    const [result] = await pool.query(
+      `DELETE FROM assignment_submissions WHERE assignment_id = :assignmentId;`,
+      { assignmentId }
+    );
+    
+    req.flash('success', `Berhasil mereset ${result.affectedRows} submission dan menghapus ${deletedFiles} file`);
+    res.redirect(`/teacher/assignments/${assignmentId}`);
+  } catch (err) {
+    console.error('Error resetting all submissions:', err);
+    req.flash('error', 'Gagal mereset submission');
     res.redirect(`/teacher/assignments/${req.params.id}`);
   }
 });

@@ -63,15 +63,45 @@
         <%= assignment.allow_late_submission ? 'Diizinkan' : 'Tidak Diizinkan' %>
       </span>
     </div>
+    <div class="ml-auto flex gap-2">
+      <a href="/teacher/assignments/<%= assignment.id %>/edit" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md">
+        ✏️ Edit Tugas
+      </a>
+      <% if (submissions.length > 0) { %>
+        <button onclick="openResetModal()" class="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md">
+          🔄 Reset Submission
+        </button>
+      <% } %>
+    </div>
   </div>
 </div>
 
 <!-- Submissions -->
 <div class="bg-white rounded-xl shadow-soft border border-slate-200 overflow-hidden">
-  <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
-    <h2 class="text-lg font-semibold text-slate-900">
-      Submission Siswa (<%= submissions.length %>)
-    </h2>
+  <div class="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">
+          Submission Siswa (<%= submissions.length %>)
+        </h2>
+        <p class="text-sm text-slate-600 mt-1">
+          <%= assignment.submission_count %> dari <%= assignment.total_students %> siswa telah mengumpulkan
+        </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="text-right">
+          <div class="text-2xl font-bold <%= assignment.submission_percentage >= 75 ? 'text-green-600' : assignment.submission_percentage >= 50 ? 'text-yellow-600' : 'text-red-600' %>">
+            <%= assignment.submission_percentage %>%
+          </div>
+          <div class="text-xs text-slate-500">Tingkat Pengumpulan</div>
+        </div>
+        <div class="w-32">
+          <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+            <div class="h-3 rounded-full transition-all duration-300 <%= assignment.submission_percentage >= 75 ? 'bg-gradient-to-r from-green-500 to-emerald-600' : assignment.submission_percentage >= 50 ? 'bg-gradient-to-r from-yellow-500 to-amber-600' : 'bg-gradient-to-r from-red-500 to-rose-600' %>" style="width: <%= assignment.submission_percentage %>%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   
   <% if (submissions.length === 0) { %>
@@ -149,6 +179,17 @@
                   >
                     <%= sub.score !== null ? '✏️ Edit' : '📝 Nilai' %>
                   </button>
+                  
+                  <!-- Reset Individual Button -->
+                  <button 
+                    onclick="resetIndividual(<%= sub.id %>, '<%= sub.student_name %>')"
+                    class="px-3 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    title="Reset submission siswa ini"
+                  >
+                    🗑️ Reset
+                  </button>
+                </div>
+              </td>
                 </div>
               </td>
             </tr>
@@ -479,6 +520,110 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeGradeModal();
     closeViewModal();
+  }
+});
+</script>
+
+
+<!-- Reset Modal -->
+<div id="resetModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+    <div class="p-6 border-b border-slate-200">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-slate-900">Reset Submission</h2>
+        <button onclick="closeResetModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <div class="p-6">
+      <div class="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+        <div class="flex items-start gap-3">
+          <div class="text-2xl">⚠️</div>
+          <div>
+            <h3 class="font-semibold text-orange-900 mb-1">Peringatan!</h3>
+            <p class="text-sm text-orange-800">
+              Reset akan menghapus SEMUA submission siswa untuk tugas ini. File yang diupload dan nilai akan dihapus permanen dan tidak dapat dikembalikan.
+            </p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mb-4">
+        <p class="text-slate-700 mb-2">Apa yang akan dihapus:</p>
+        <ul class="list-disc list-inside text-sm text-slate-600 space-y-1">
+          <li><%= submissions.length %> submission siswa</li>
+          <li>Semua file yang diupload</li>
+          <li>Semua nilai dan feedback</li>
+        </ul>
+      </div>
+      
+      <div class="flex gap-3">
+        <button 
+          onclick="resetAllSubmissions()"
+          class="flex-1 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+        >
+          🗑️ Reset Semua
+        </button>
+        <button 
+          onclick="closeResetModal()"
+          class="px-4 py-2 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white font-semibold rounded-lg transition-all duration-200"
+        >
+          Batal
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Reset functions
+function openResetModal() {
+  document.getElementById('resetModal').classList.remove('hidden');
+}
+
+function closeResetModal() {
+  document.getElementById('resetModal').classList.add('hidden');
+}
+
+function resetAllSubmissions() {
+  if (!confirm('Yakin ingin mereset SEMUA submission tugas ini? Semua file dan nilai akan dihapus dan tidak dapat dikembalikan!')) {
+    return;
+  }
+  
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/teacher/assignments/<%= assignment.id %>/reset-all';
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function resetIndividual(submissionId, studentName) {
+  if (!confirm(`Yakin ingin mereset submission dari ${studentName}? File dan nilai akan dihapus dan tidak dapat dikembalikan!`)) {
+    return;
+  }
+  
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = `/teacher/assignments/submissions/${submissionId}/reset`;
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// Close reset modal when clicking outside
+document.getElementById('resetModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeResetModal();
+  }
+});
+
+// Add Escape key handler for reset modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeResetModal();
   }
 });
 </script>
