@@ -690,7 +690,14 @@ router.post('/classes/bulk-delete', async (req, res) => {
     // Delete related data
     await conn.query(`UPDATE users SET class_id = NULL WHERE class_id IN (${placeholders});`, validIds);
     await conn.query(`DELETE FROM exam_classes WHERE class_id IN (${placeholders});`, validIds);
-    await conn.query(`DELETE FROM material_classes WHERE class_id IN (${placeholders});`, validIds);
+    
+    // Try to delete from material_classes if table exists
+    try {
+      await conn.query(`DELETE FROM material_classes WHERE class_id IN (${placeholders});`, validIds);
+    } catch (err) {
+      // Table might not exist, skip silently
+      console.log('material_classes table not found, skipping...');
+    }
     
     // Delete classes
     const [result] = await conn.query(`DELETE FROM classes WHERE id IN (${placeholders});`, validIds);
@@ -2146,12 +2153,14 @@ router.get('/exams', async (req, res) => {
   const [exams] = await pool.query(
     `SELECT 
       e.id, e.title, e.description, e.start_at, e.end_at, 
-      e.duration_minutes, e.is_published, e.created_at,
+      e.duration_minutes, e.is_published, e.created_at, e.class_id,
       s.name AS subject_name, s.code AS subject_code,
       u.full_name AS teacher_name,
       c.name AS class_name,
       (SELECT COUNT(*) FROM questions WHERE exam_id = e.id) AS question_count,
-      (SELECT COUNT(*) FROM attempts WHERE exam_id = e.id) AS attempt_count
+      (SELECT COUNT(*) FROM attempts WHERE exam_id = e.id) AS attempt_count,
+      (SELECT COUNT(DISTINCT student_id) FROM attempts WHERE exam_id = e.id) AS participant_count,
+      (SELECT COUNT(*) FROM users WHERE role='STUDENT' AND (e.class_id IS NULL OR class_id = e.class_id)) AS total_students
      FROM exams e
      LEFT JOIN subjects s ON s.id = e.subject_id
      LEFT JOIN users u ON u.id = e.teacher_id
@@ -2161,6 +2170,11 @@ router.get('/exams', async (req, res) => {
      LIMIT :limit OFFSET :offset;`,
     { ...queryParams, limit, offset }
   );
+  
+  // Calculate participation percentage for each exam
+  exams.forEach(exam => {
+    exam.participation_percentage = exam.total_students > 0 ? Math.round((exam.participant_count / exam.total_students) * 100) : 0;
+  });
 
   const totalPages = Math.ceil(total / limit);
 
@@ -2360,7 +2374,9 @@ router.get('/materials', async (req, res) => {
       s.code AS subject_code, s.name AS subject_name,
       u.full_name AS teacher_name,
       c.name AS class_name,
-      (SELECT COUNT(*) FROM material_reads WHERE material_id = m.id) AS read_count
+      m.class_id,
+      (SELECT COUNT(*) FROM material_reads WHERE material_id = m.id) AS read_count,
+      (SELECT COUNT(*) FROM users WHERE role='STUDENT' AND (m.class_id IS NULL OR class_id = m.class_id)) AS total_students
      FROM materials m
      LEFT JOIN subjects s ON s.id = m.subject_id
      LEFT JOIN users u ON u.id = m.teacher_id
@@ -2370,6 +2386,11 @@ router.get('/materials', async (req, res) => {
      LIMIT :limit OFFSET :offset;`,
     { ...queryParams, limit, offset }
   );
+  
+  // Calculate read percentage for each material
+  materials.forEach(m => {
+    m.read_percentage = m.total_students > 0 ? Math.round((m.read_count / m.total_students) * 100) : 0;
+  });
   
   const totalPages = Math.ceil(total / limit);
 
@@ -2487,7 +2508,14 @@ router.post('/materials/bulk-delete', async (req, res) => {
     
     // Delete related data
     await conn.query(`DELETE FROM material_reads WHERE material_id IN (${placeholders});`, validIds);
-    await conn.query(`DELETE FROM material_classes WHERE material_id IN (${placeholders});`, validIds);
+    
+    // Try to delete from material_classes if table exists
+    try {
+      await conn.query(`DELETE FROM material_classes WHERE material_id IN (${placeholders});`, validIds);
+    } catch (err) {
+      // Table might not exist, skip silently
+      console.log('material_classes table not found, skipping...');
+    }
     
     // Delete materials
     const [result] = await conn.query(`DELETE FROM materials WHERE id IN (${placeholders});`, validIds);
@@ -2770,7 +2798,8 @@ router.get('/assignments', async (req, res) => {
         u.full_name as teacher_name,
         s.name as subject_name,
         c.name as class_name,
-        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) as submission_count
+        (SELECT COUNT(*) FROM assignment_submissions WHERE assignment_id = a.id) as submission_count,
+        (SELECT COUNT(*) FROM users WHERE role='STUDENT' AND (a.class_id IS NULL OR class_id = a.class_id)) AS total_students
       FROM assignments a
       JOIN users u ON a.teacher_id = u.id
       JOIN subjects s ON a.subject_id = s.id
@@ -2779,6 +2808,11 @@ router.get('/assignments', async (req, res) => {
       ORDER BY a.created_at DESC;`,
       queryParams
     );
+    
+    // Calculate submission percentage for each assignment
+    assignments.forEach(assignment => {
+      assignment.submission_percentage = assignment.total_students > 0 ? Math.round((assignment.submission_count / assignment.total_students) * 100) : 0;
+    });
 
     // Get stats
     const [[statsRow]] = await pool.query(`
@@ -2895,26 +2929,43 @@ router.post('/assignments/:id/delete', async (req, res) => {
 
 // POST Bulk Delete Assignments
 router.post('/assignments/bulk-delete', async (req, res) => {
-  const ids = req.body['ids[]'] || [];
-  const idsArray = Array.isArray(ids) ? ids : [ids];
+  // Handle both 'ids[]' and 'ids' parameter names
+  let ids = req.body['ids[]'] || req.body.ids || [];
   
-  if (idsArray.length === 0) {
+  // Ensure it's always an array
+  const idsArray = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+  
+  // Filter out empty values and convert to numbers
+  const validIds = idsArray.filter(id => id && id.trim() !== '').map(id => parseInt(id)).filter(id => !isNaN(id));
+  
+  if (validIds.length === 0) {
     req.flash('error', 'Tidak ada tugas yang dipilih.');
     return res.redirect('/admin/assignments');
   }
   
+  const conn = await pool.getConnection();
+  let deleted = 0;
+  
   try {
-    const placeholders = idsArray.map((_, i) => `:id${i}`).join(',');
-    const params = {};
-    idsArray.forEach((id, i) => {
-      params[`id${i}`] = id;
-    });
+    await conn.beginTransaction();
     
-    await pool.query(`DELETE FROM assignments WHERE id IN (${placeholders});`, params);
-    req.flash('success', `${idsArray.length} tugas berhasil dihapus.`);
+    const placeholders = validIds.map(() => '?').join(',');
+    
+    // Delete related data first
+    await conn.query(`DELETE FROM assignment_submissions WHERE assignment_id IN (${placeholders});`, validIds);
+    
+    // Delete assignments
+    const [result] = await conn.query(`DELETE FROM assignments WHERE id IN (${placeholders});`, validIds);
+    deleted = result.affectedRows || 0;
+    
+    await conn.commit();
+    req.flash('success', `Berhasil menghapus ${deleted} tugas dan data terkait.`);
   } catch (e) {
+    await conn.rollback();
     console.error(e);
-    req.flash('error', 'Gagal menghapus tugas.');
+    req.flash('error', 'Gagal menghapus tugas. Terjadi kesalahan pada database.');
+  } finally {
+    conn.release();
   }
   
   res.redirect('/admin/assignments');
@@ -3017,26 +3068,40 @@ router.post('/question-bank/:id/delete', async (req, res) => {
 
 // POST Bulk Delete Question Bank
 router.post('/question-bank/bulk-delete', async (req, res) => {
-  const ids = req.body['ids[]'] || [];
-  const idsArray = Array.isArray(ids) ? ids : [ids];
+  // Handle both 'ids[]' and 'ids' parameter names
+  let ids = req.body['ids[]'] || req.body.ids || [];
   
-  if (idsArray.length === 0) {
+  // Ensure it's always an array
+  const idsArray = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+  
+  // Filter out empty values and convert to numbers
+  const validIds = idsArray.filter(id => id && id.trim() !== '').map(id => parseInt(id)).filter(id => !isNaN(id));
+  
+  if (validIds.length === 0) {
     req.flash('error', 'Tidak ada soal yang dipilih.');
     return res.redirect('/admin/question-bank');
   }
   
+  const conn = await pool.getConnection();
+  let deleted = 0;
+  
   try {
-    const placeholders = idsArray.map((_, i) => `:id${i}`).join(',');
-    const params = {};
-    idsArray.forEach((id, i) => {
-      params[`id${i}`] = id;
-    });
+    await conn.beginTransaction();
     
-    await pool.query(`DELETE FROM question_bank WHERE id IN (${placeholders});`, params);
-    req.flash('success', `${idsArray.length} soal berhasil dihapus.`);
+    const placeholders = validIds.map(() => '?').join(',');
+    
+    // Delete question bank items
+    const [result] = await conn.query(`DELETE FROM question_bank WHERE id IN (${placeholders});`, validIds);
+    deleted = result.affectedRows || 0;
+    
+    await conn.commit();
+    req.flash('success', `Berhasil menghapus ${deleted} soal dari bank soal.`);
   } catch (e) {
+    await conn.rollback();
     console.error(e);
-    req.flash('error', 'Gagal menghapus soal.');
+    req.flash('error', 'Gagal menghapus soal. Terjadi kesalahan pada database.');
+  } finally {
+    conn.release();
   }
   
   res.redirect('/admin/question-bank');

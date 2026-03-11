@@ -404,14 +404,19 @@ router.post('/materials/:id/toggle-publish', async (req, res) => {
 
     // Kirim notifikasi jika materi baru dipublish
     if (!wasPublished) {
-      const className = material.class_name || 'Semua Kelas';
-      await createNotificationForClass({
-        classId: material.class_id,
-        title: `Materi Baru: ${material.title}`,
-        message: `Guru telah mempublish materi baru "${material.title}" untuk mata pelajaran ${material.subject_name} (${className})`,
-        type: 'MATERIAL',
-        referenceId: material.id
-      });
+      try {
+        const className = material.class_name || 'Semua Kelas';
+        await createNotificationForClass({
+          classId: material.class_id,
+          title: `Materi Baru: ${material.title}`,
+          message: `Guru telah mempublish materi baru "${material.title}" untuk mata pelajaran ${material.subject_name} (${className})`,
+          type: 'MATERIAL',
+          referenceId: material.id
+        });
+      } catch (notifError) {
+        // Log error tapi jangan gagalkan proses publish
+        console.error('Error sending notification:', notifError);
+      }
     }
 
     req.flash('success', 'Status publish materi diperbarui.');
@@ -679,35 +684,40 @@ router.post('/exams/:id/toggle-publish', async (req, res) => {
 
     // Kirim notifikasi jika ujian baru dipublish
     if (!wasPublished) {
-      // Get class IDs for this exam
-      const [examClasses] = await pool.query(
-        `SELECT ec.class_id, c.name AS class_name
-         FROM exam_classes ec
-         JOIN classes c ON c.id=ec.class_id
-         WHERE ec.exam_id=:exam_id;`,
-        { exam_id: exam.id }
-      );
+      try {
+        // Get class IDs for this exam
+        const [examClasses] = await pool.query(
+          `SELECT ec.class_id, c.name AS class_name
+           FROM exam_classes ec
+           JOIN classes c ON c.id=ec.class_id
+           WHERE ec.exam_id=:exam_id;`,
+          { exam_id: exam.id }
+        );
 
-      if (examClasses.length > 0) {
-        const classIds = examClasses.map(ec => ec.class_id);
-        const classNames = examClasses.map(ec => ec.class_name).join(', ');
-        
-        await createNotificationForMultipleClasses({
-          classIds,
-          title: `Ujian Baru: ${exam.title}`,
-          message: `Guru telah mempublish ujian baru "${exam.title}" untuk mata pelajaran ${exam.subject_name} (${classNames})`,
-          type: 'EXAM',
-          referenceId: exam.id
-        });
-      } else if (exam.class_id) {
-        // Fallback untuk exam dengan single class_id (backward compatibility)
-        await createNotificationForClass({
-          classId: exam.class_id,
-          title: `Ujian Baru: ${exam.title}`,
-          message: `Guru telah mempublish ujian baru "${exam.title}" untuk mata pelajaran ${exam.subject_name}`,
-          type: 'EXAM',
-          referenceId: exam.id
-        });
+        if (examClasses.length > 0) {
+          const classIds = examClasses.map(ec => ec.class_id);
+          const classNames = examClasses.map(ec => ec.class_name).join(', ');
+          
+          await createNotificationForMultipleClasses({
+            classIds,
+            title: `Ujian Baru: ${exam.title}`,
+            message: `Guru telah mempublish ujian baru "${exam.title}" untuk mata pelajaran ${exam.subject_name} (${classNames})`,
+            type: 'EXAM',
+            referenceId: exam.id
+          });
+        } else if (exam.class_id) {
+          // Fallback untuk exam dengan single class_id (backward compatibility)
+          await createNotificationForClass({
+            classId: exam.class_id,
+            title: `Ujian Baru: ${exam.title}`,
+            message: `Guru telah mempublish ujian baru "${exam.title}" untuk mata pelajaran ${exam.subject_name}`,
+            type: 'EXAM',
+            referenceId: exam.id
+          });
+        }
+      } catch (notifError) {
+        // Log error tapi jangan gagalkan proses publish
+        console.error('Error sending notification:', notifError);
       }
     }
 
@@ -881,6 +891,80 @@ router.get('/exams/:id', async (req, res) => {
     );
     q.options = options;
   }
+  
+  // Get participant statistics
+  let totalStudentsQuery;
+  let queryParams = { exam_id: exam.id };
+  
+  if (exam.class_id) {
+    // Ujian untuk kelas tertentu - hanya hitung siswa di kelas tersebut
+    totalStudentsQuery = `SELECT COUNT(*) as total FROM users WHERE role='STUDENT' AND class_id = :class_id`;
+    queryParams.class_id = exam.class_id;
+  } else {
+    // Ujian untuk semua kelas - hitung semua siswa
+    totalStudentsQuery = `SELECT COUNT(*) as total FROM users WHERE role='STUDENT'`;
+  }
+  
+  const [[totalStudentsResult]] = await pool.query(totalStudentsQuery, queryParams);
+  const [[completedResult]] = await pool.query(
+    `SELECT COUNT(DISTINCT student_id) as completed FROM attempts WHERE exam_id = :exam_id`,
+    { exam_id: exam.id }
+  );
+  
+  exam.completed_count = completedResult.completed || 0;
+  exam.total_students = totalStudentsResult.total || 0;
+  exam.not_completed_count = exam.total_students - exam.completed_count;
+  exam.completed_percentage = exam.total_students > 0 ? Math.round((exam.completed_count / exam.total_students) * 100) : 0;
+  exam.not_completed_percentage = 100 - exam.completed_percentage;
+  
+  // Get list of students who completed the exam
+  let completedStudentsQuery;
+  if (exam.class_id) {
+    completedStudentsQuery = `
+      SELECT DISTINCT u.id, u.username, u.full_name, c.name as class_name,
+             MAX(a.created_at) as last_attempt
+      FROM users u
+      INNER JOIN attempts a ON a.student_id = u.id
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT' AND u.class_id = :class_id AND a.exam_id = :exam_id
+      GROUP BY u.id
+      ORDER BY u.full_name ASC`;
+  } else {
+    completedStudentsQuery = `
+      SELECT DISTINCT u.id, u.username, u.full_name, c.name as class_name,
+             MAX(a.created_at) as last_attempt
+      FROM users u
+      INNER JOIN attempts a ON a.student_id = u.id
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT' AND a.exam_id = :exam_id
+      GROUP BY u.id
+      ORDER BY u.full_name ASC`;
+  }
+  const [completedStudents] = await pool.query(completedStudentsQuery, queryParams);
+  
+  // Get list of students who haven't completed the exam
+  let notCompletedStudentsQuery;
+  if (exam.class_id) {
+    notCompletedStudentsQuery = `
+      SELECT u.id, u.username, u.full_name, c.name as class_name
+      FROM users u
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT' AND u.class_id = :class_id
+      AND u.id NOT IN (SELECT DISTINCT student_id FROM attempts WHERE exam_id = :exam_id)
+      ORDER BY u.full_name ASC`;
+  } else {
+    notCompletedStudentsQuery = `
+      SELECT u.id, u.username, u.full_name, c.name as class_name
+      FROM users u
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT'
+      AND u.id NOT IN (SELECT DISTINCT student_id FROM attempts WHERE exam_id = :exam_id)
+      ORDER BY u.full_name ASC`;
+  }
+  const [notCompletedStudents] = await pool.query(notCompletedStudentsQuery, queryParams);
+  
+  exam.completed_students = completedStudents;
+  exam.not_completed_students = notCompletedStudents;
 
   res.render('teacher/exam_detail', { title: `Ujian: ${exam.title}`, exam, questions });
 });
@@ -2399,6 +2483,18 @@ router.post('/assignments', async (req, res) => {
     const teacherId = req.session.user.id;
     const { subject_id, title, description, class_id, due_date, max_score, allow_late_submission, is_published } = req.body;
     
+    // Debug logging
+    console.log('Creating assignment with data:', {
+      subject_id,
+      teacher_id: teacherId,
+      title,
+      class_id,
+      due_date,
+      max_score,
+      allow_late_submission,
+      is_published
+    });
+    
     const [result] = await pool.query(
       `INSERT INTO assignments 
        (subject_id, teacher_id, title, description, class_id, due_date, max_score, allow_late_submission, is_published)
@@ -2416,22 +2512,36 @@ router.post('/assignments', async (req, res) => {
       }
     );
     
+    console.log('Assignment created successfully, ID:', result.insertId);
+    
     // Send notification if published
     if (is_published && class_id) {
-      await createNotificationForClass(
-        class_id,
-        'ASSIGNMENT',
-        `Tugas Baru: ${title}`,
-        `Guru telah memberikan tugas baru. Deadline: ${due_date ? new Date(due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
-        result.insertId
-      );
+      try {
+        console.log('Sending notification to class:', class_id);
+        await createNotificationForClass(
+          class_id,
+          'ASSIGNMENT',
+          `Tugas Baru: ${title}`,
+          `Guru telah memberikan tugas baru. Deadline: ${due_date ? new Date(due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
+          result.insertId
+        );
+        console.log('Notification sent successfully');
+      } catch (notifErr) {
+        console.error('Error sending notification:', notifErr);
+        // Don't fail the whole operation if notification fails
+      }
     }
     
     req.flash('success', 'Tugas berhasil dibuat');
     res.redirect('/teacher/assignments');
   } catch (err) {
     console.error('Error creating assignment:', err);
-    req.flash('error', 'Gagal membuat tugas');
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      sql: err.sql
+    });
+    req.flash('error', `Gagal membuat tugas: ${err.message}`);
     res.redirect('/teacher/assignments/new');
   }
 });
@@ -2621,13 +2731,18 @@ router.post('/assignments/:id/toggle-publish', async (req, res) => {
     
     // Send notification if publishing
     if (newStatus === 1 && assignment.class_id) {
-      await createNotificationForClass(
-        assignment.class_id,
-        'ASSIGNMENT',
-        `Tugas Baru: ${assignment.title}`,
-        `Guru telah memberikan tugas baru. Deadline: ${assignment.due_date ? new Date(assignment.due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
-        assignmentId
-      );
+      try {
+        await createNotificationForClass(
+          assignment.class_id,
+          'ASSIGNMENT',
+          `Tugas Baru: ${assignment.title}`,
+          `Guru telah memberikan tugas baru. Deadline: ${assignment.due_date ? new Date(assignment.due_date).toLocaleDateString('id-ID') : 'Tidak ada'}`,
+          assignmentId
+        );
+      } catch (notifError) {
+        // Log error tapi jangan gagalkan proses publish
+        console.error('Error sending notification:', notifError);
+      }
     }
     
     req.flash('success', newStatus ? 'Tugas dipublikasi' : 'Tugas di-unpublish');
