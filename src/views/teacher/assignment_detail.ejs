@@ -166,24 +166,32 @@
                 <div class="flex gap-2">
                   <!-- View/Preview Button -->
                   <button 
-                    onclick="viewSubmission(<%= sub.id %>, '<%= sub.student_name %>', '<%= sub.file_path %>', '<%= sub.file_name %>', '<%= (sub.notes || '').replace(/'/g, "\\'").replace(/\n/g, '\\n') %>')"
-                    class="px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    class="view-btn px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    data-id="<%= sub.id %>"
+                    data-student="<%= sub.student_name %>"
+                    data-filepath="<%= sub.file_path %>"
+                    data-filename="<%= sub.file_name %>"
+                    data-notes="<%= sub.notes || '' %>"
                   >
                     👁️ Lihat
                   </button>
                   
                   <!-- Grade Button -->
                   <button 
-                    onclick="openGradeModal(<%= sub.id %>, '<%= sub.student_name %>', <%= sub.score || 'null' %>, '<%= (sub.feedback || '').replace(/'/g, "\\'").replace(/\n/g, '\\n') %>')"
-                    class="px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    class="grade-btn px-3 py-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    data-id="<%= sub.id %>"
+                    data-student="<%= sub.student_name %>"
+                    data-score="<%= sub.score || '' %>"
+                    data-feedback="<%= sub.feedback || '' %>"
                   >
                     <%= sub.score !== null ? '✏️ Edit' : '📝 Nilai' %>
                   </button>
                   
                   <!-- Reset Individual Button -->
                   <button 
-                    onclick="resetIndividual(<%= sub.id %>, '<%= sub.student_name %>')"
-                    class="px-3 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    class="reset-btn px-3 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    data-id="<%= sub.id %>"
+                    data-student="<%= sub.student_name %>"
                     title="Reset submission siswa ini"
                   >
                     🗑️ Reset
@@ -323,6 +331,41 @@ let currentSubmissionId = null;
 let currentStudentName = null;
 let currentScore = null;
 let currentFeedback = null;
+
+// Event listeners for buttons using data attributes
+document.addEventListener('DOMContentLoaded', function() {
+  // View buttons
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = this.dataset.id;
+      const student = this.dataset.student;
+      const filepath = this.dataset.filepath;
+      const filename = this.dataset.filename;
+      const notes = this.dataset.notes;
+      viewSubmission(id, student, filepath, filename, notes);
+    });
+  });
+  
+  // Grade buttons
+  document.querySelectorAll('.grade-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = this.dataset.id;
+      const student = this.dataset.student;
+      const score = this.dataset.score ? parseFloat(this.dataset.score) : null;
+      const feedback = this.dataset.feedback;
+      openGradeModal(id, student, score, feedback);
+    });
+  });
+  
+  // Reset buttons
+  document.querySelectorAll('.reset-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id = this.dataset.id;
+      const student = this.dataset.student;
+      resetIndividual(id, student);
+    });
+  });
+});
 
 function openGradeModal(submissionId, studentName, score, feedback) {
   const modal = document.getElementById('gradeModal');
