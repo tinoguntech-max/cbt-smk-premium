@@ -341,7 +341,7 @@
                   <a href="/teacher/questions/<%= question.id %>/edit" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all">
                     Edit
                   </a>
-                  <form method="POST" action="/teacher/exams/<%= exam.id %>/questions/<%= question.id %>?_method=DELETE" class="inline" onsubmit="return confirm('Yakin ingin menghapus soal ini?');">
+                  <form method="POST" action="/teacher/questions/<%= question.id %>?_method=DELETE" class="inline" onsubmit="return confirm('Yakin ingin menghapus soal ini?');">
                     <button type="submit" class="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all">
                       Hapus
                     </button>

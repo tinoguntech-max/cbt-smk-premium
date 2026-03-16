@@ -1769,6 +1769,7 @@ router.get('/questions/:id/edit', async (req, res) => {
 
   res.render('teacher/question_edit', {
     title: 'Edit Soal',
+    user,
     exam: {
       id: q.exam_id,
       title: q.exam_title
@@ -1864,7 +1865,8 @@ router.put('/questions/:id', upload.fields([{ name: 'image', maxCount: 1 }, { na
     conn.release();
   }
 
-  return res.redirect(`/teacher/exams/${row.exam_id}`);
+  const redirectBase = user.role === 'ADMIN' ? '/admin/exams' : '/teacher/exams';
+  return res.redirect(`${redirectBase}/${row.exam_id}`);
 });
 
 router.delete('/questions/:id', async (req, res) => {
@@ -1892,7 +1894,8 @@ router.delete('/questions/:id', async (req, res) => {
     console.error(e);
     req.flash('error', 'Gagal menghapus soal.');
   }
-  res.redirect(`/teacher/exams/${row.exam_id}`);
+  const deleteRedirectBase = user.role === 'ADMIN' ? '/admin/exams' : '/teacher/exams';
+  res.redirect(`${deleteRedirectBase}/${row.exam_id}`);
 });
 
 router.post('/exams/:id/regenerate-code', async (req, res) => {
