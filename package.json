@@ -28,17 +28,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@capacitor/android": "^8.1.0",
-    "@capacitor/app": "^8.0.1",
-    "@capacitor/camera": "^8.0.1",
-    "@capacitor/cli": "^7.5.0",
-    "@capacitor/core": "^8.1.0",
-    "@capacitor/filesystem": "^8.1.2",
-    "@capacitor/network": "^8.0.1",
-    "@capacitor/push-notifications": "^8.0.1",
-    "@capacitor/splash-screen": "^8.0.1",
-    "@capacitor/status-bar": "^8.0.1",
-    "@jitsi/react-sdk": "^1.4.4",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.0.0-rc.12",
     "connect-flash": "^0.1.1",
@@ -63,6 +52,17 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/app": "^8.0.1",
+    "@capacitor/camera": "^8.0.1",
+    "@capacitor/cli": "^7.5.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/push-notifications": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
+    "@jitsi/react-sdk": "^1.4.4",
     "nodemon": "^3.1.4"
   }
 }
