@@ -11,7 +11,16 @@ const { requireRole } = require('../middleware/auth');
 const { createNotificationForClass, createNotificationForMultipleClasses } = require('../utils/notifications');
 
 const router = express.Router();
-router.use(requireRole('TEACHER'));
+router.use(requireRole('TEACHER', 'ADMIN'));
+
+// Helper: admin bisa akses semua data, teacher hanya miliknya sendiri
+// Gunakan di query: WHERE (:isAdmin=1 OR e.teacher_id=:tid)
+function teacherFilter(user) {
+  return {
+    tid: user.id,
+    isAdmin: user.role === 'ADMIN' ? 1 : 0
+  };
+}
 
 // Upload config (gambar soal & import)
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads', 'questions');
@@ -386,7 +395,7 @@ router.post('/materials/:id/toggle-publish', async (req, res) => {
        JOIN subjects s ON s.id=m.subject_id
        LEFT JOIN classes c ON c.id=m.class_id
        WHERE m.id=:id AND m.teacher_id=:tid;`,
-      { id: req.params.id, tid: user.id }
+      { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     if (!material) {
@@ -398,8 +407,8 @@ router.post('/materials/:id/toggle-publish', async (req, res) => {
 
     await pool.query(
       `UPDATE materials SET is_published = IF(is_published=1,0,1)
-       WHERE id=:id AND teacher_id=:tid;`,
-      { id: req.params.id, tid: user.id }
+       WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`,
+      { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     // Kirim notifikasi jika materi baru dipublish
@@ -436,7 +445,7 @@ router.get('/materials/:id', async (req, res) => {
      LEFT JOIN classes c ON c.id=m.class_id
      WHERE m.id=:id AND m.teacher_id=:tid
      LIMIT 1;`,
-    { id: req.params.id, tid: user.id }
+    { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
   if (!material) return res.status(404).render('error', { title: 'Tidak ditemukan', message: 'Materi tidak ditemukan.', user });
   res.render('teacher/material_detail', { title: `Materi: ${material.title}`, material });
@@ -452,7 +461,7 @@ router.get('/materials/:id/edit', async (req, res) => {
      LEFT JOIN classes c ON c.id=m.class_id
      WHERE m.id=:id AND m.teacher_id=:tid
      LIMIT 1;`,
-    { id: req.params.id, tid: user.id }
+    { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
   if (!material) return res.status(404).render('error', { title: 'Tidak ditemukan', message: 'Materi tidak ditemukan.', user });
 
@@ -467,7 +476,7 @@ router.put('/materials/:id', uploadMaterials.fields([{ name: 'docx', maxCount: 1
   const { subject_id, title, description, class_id, content_html, embed_mode, youtube_url, pdf_url, auto_complete_minutes } = req.body;
 
   const [[existing]] = await pool.query(
-    `SELECT * FROM materials WHERE id=:id AND teacher_id=:tid LIMIT 1;`,
+    `SELECT * FROM materials WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid) LIMIT 1;`,
     { id: materialId, tid: user.id }
   );
   if (!existing) {
@@ -546,7 +555,7 @@ router.put('/materials/:id', uploadMaterials.fields([{ name: 'docx', maxCount: 1
            embed_type=:embed_type,
            embed_url=:embed_url,
            auto_complete_minutes=:auto_complete_minutes
-       WHERE id=:id AND teacher_id=:tid;`,
+       WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`,
       {
         subject_id,
         title,
@@ -726,7 +735,7 @@ router.post('/exams/:id/toggle-publish', async (req, res) => {
        FROM exams e
        JOIN subjects s ON s.id=e.subject_id
        WHERE e.id=:id AND e.teacher_id=:tid;`,
-      { id: req.params.id, tid: user.id }
+      { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     if (!exam) {
@@ -736,7 +745,7 @@ router.post('/exams/:id/toggle-publish', async (req, res) => {
 
     const wasPublished = exam.is_published === 1;
 
-    await pool.query(`UPDATE exams SET is_published = IF(is_published=1,0,1) WHERE id=:id AND teacher_id=:tid;`, {
+    await pool.query(`UPDATE exams SET is_published = IF(is_published=1,0,1) WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, {
       id: req.params.id,
       tid: user.id
     });
@@ -796,8 +805,8 @@ router.get('/exams/:id/edit', async (req, res) => {
   try {
     // Get exam data
     const [[exam]] = await pool.query(
-      `SELECT * FROM exams WHERE id=:id AND teacher_id=:tid LIMIT 1;`,
-      { id: examId, tid: user.id }
+      `SELECT * FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid) LIMIT 1;`,
+      { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     if (!exam) {
@@ -854,8 +863,8 @@ router.put('/exams/:id', async (req, res) => {
   try {
     // Verify ownership
     const [[exam]] = await pool.query(
-      `SELECT id FROM exams WHERE id=:id AND teacher_id=:tid LIMIT 1;`,
-      { id: examId, tid: user.id }
+      `SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid) LIMIT 1;`,
+      { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     if (!exam) {
@@ -932,9 +941,9 @@ router.get('/exams/:id', async (req, res) => {
      FROM exams e
      JOIN subjects s ON s.id=e.subject_id
      LEFT JOIN classes c ON c.id=e.class_id
-     WHERE e.id=:id AND e.teacher_id=:tid
+     WHERE e.id=:id AND (:isAdmin=1 OR e.teacher_id=:tid)
      LIMIT 1;`,
-    { id: req.params.id, tid: user.id }
+    { id: req.params.id, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
   if (!exam) return res.status(404).render('error', { title: 'Tidak ditemukan', message: 'Ujian tidak ditemukan.', user });
 
@@ -1100,7 +1109,7 @@ router.post('/exams/:id/questions', upload.fields([{ name: 'image', maxCount: 1 
   }
 
   // verify ownership
-  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
   if (!ok) {
     req.flash('error', 'Akses ditolak.');
     return res.redirect('/teacher/exams');
@@ -1163,7 +1172,7 @@ router.post('/exams/:id/questions', upload.fields([{ name: 'image', maxCount: 1 
 
 router.get('/exams/:id/import', async (req, res) => {
   const user = req.session.user;
-  const [[exam]] = await pool.query(`SELECT id, title FROM exams WHERE id=:id AND teacher_id=:tid LIMIT 1;`, {
+  const [[exam]] = await pool.query(`SELECT id, title FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid) LIMIT 1;`, {
     id: req.params.id,
     tid: user.id
   });
@@ -1179,7 +1188,7 @@ router.post('/exams/:id/questions/import-word', uploadDocx.single('docx'), async
   const user = req.session.user;
   const examId = req.params.id;
 
-  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
   if (!ok) {
     req.flash('error', 'Akses ditolak.');
     return res.redirect('/teacher/exams');
@@ -1371,7 +1380,7 @@ router.post(
     const user = req.session.user;
     const examId = req.params.id;
 
-    const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+    const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
     if (!ok) {
       req.flash('error', 'Akses ditolak.');
       return res.redirect('/teacher/exams');
@@ -1398,7 +1407,7 @@ router.post(
       const importId = nanoid(12);
       req.session.importPreview = { importId, examId: String(examId), preview, errors, createdAt: Date.now() };
 
-      const [[exam]] = await pool.query(`SELECT id, title FROM exams WHERE id=:id AND teacher_id=:tid LIMIT 1;`, {
+      const [[exam]] = await pool.query(`SELECT id, title FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid) LIMIT 1;`, {
         id: examId,
         tid: user.id
       });
@@ -1423,7 +1432,7 @@ router.get('/exams/:id/questions/import/errors.csv', async (req, res) => {
   const user = req.session.user;
   const examId = req.params.id;
 
-  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
   if (!ok) return res.status(403).send('Forbidden');
 
   const sess = req.session.importPreview;
@@ -1447,7 +1456,7 @@ router.post('/exams/:id/questions/import/commit', async (req, res) => {
   const examId = req.params.id;
   const { importId } = req.body;
 
-  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
   if (!ok) {
     req.flash('error', 'Akses ditolak.');
     return res.redirect('/teacher/exams');
@@ -1532,7 +1541,7 @@ router.post('/exams/:id/questions/import-word', uploadDocx.single('docx'), async
   const user = req.session.user;
   const examId = req.params.id;
 
-  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND teacher_id=:tid;`, { id: examId, tid: user.id });
+  const [[ok]] = await pool.query(`SELECT id FROM exams WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 });
   if (!ok) {
     req.flash('error', 'Akses ditolak.');
     return res.redirect('/teacher/exams');
@@ -1728,14 +1737,15 @@ router.post('/exams/:id/questions/import-word', uploadDocx.single('docx'), async
 router.get('/questions/:id/edit', async (req, res) => {
   const user = req.session.user;
   const qId = req.params.id;
+  const isAdmin = user.role === 'ADMIN';
 
   const [[q]] = await pool.query(
     `SELECT q.id, q.exam_id, q.question_text, q.question_image, q.question_pdf, q.points, e.title AS exam_title
      FROM questions q
      JOIN exams e ON e.id=q.exam_id
-     WHERE q.id=:qid AND e.teacher_id=:tid
+     WHERE q.id=:qid AND (:isAdmin=1 OR e.teacher_id=:tid)
      LIMIT 1;`,
-    { qid: qId, tid: user.id }
+    { qid: qId, tid: user.id, isAdmin: isAdmin ? 1 : 0 }
   );
   if (!q) {
     req.flash('error', 'Akses ditolak / soal tidak ditemukan.');
@@ -1791,9 +1801,9 @@ router.put('/questions/:id', upload.fields([{ name: 'image', maxCount: 1 }, { na
     `SELECT q.id, q.exam_id, q.question_image, q.question_pdf
      FROM questions q
      JOIN exams ex ON ex.id=q.exam_id
-     WHERE q.id=:qid AND ex.teacher_id=:tid
+     WHERE q.id=:qid AND (:isAdmin=1 OR ex.teacher_id=:tid)
      LIMIT 1;`,
-    { qid: qId, tid: user.id }
+    { qid: qId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
   if (!row) {
     req.flash('error', 'Akses ditolak.');
@@ -1865,9 +1875,9 @@ router.delete('/questions/:id', async (req, res) => {
     `SELECT q.id, q.exam_id
      FROM questions q
      JOIN exams e ON e.id=q.exam_id
-     WHERE q.id=:qid AND e.teacher_id=:tid
+     WHERE q.id=:qid AND (:isAdmin=1 OR e.teacher_id=:tid)
      LIMIT 1;`,
-    { qid: qId, tid: user.id }
+    { qid: qId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
 
   if (!row) {
@@ -1889,7 +1899,7 @@ router.post('/exams/:id/regenerate-code', async (req, res) => {
   const user = req.session.user;
   try {
     const newCode = nanoid(6).toUpperCase();
-    await pool.query(`UPDATE exams SET access_code=:code WHERE id=:id AND teacher_id=:tid;`, {
+    await pool.query(`UPDATE exams SET access_code=:code WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid);`, {
       code: newCode,
       id: req.params.id,
       tid: user.id
@@ -1911,9 +1921,9 @@ router.post('/exams/:id/reset-results', async (req, res) => {
   const [[exam]] = await pool.query(
     `SELECT id, title, is_published
      FROM exams
-     WHERE id=:id AND teacher_id=:tid
+     WHERE id=:id AND (:isAdmin=1 OR teacher_id=:tid)
      LIMIT 1;`,
-    { id: examId, tid: user.id }
+    { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
   );
 
   if (!exam) {
@@ -3299,7 +3309,7 @@ router.get('/exams/:id/export', async (req, res) => {
        FROM exams e
        JOIN subjects s ON e.subject_id = s.id
        WHERE e.id = :id AND e.teacher_id = :tid LIMIT 1;`,
-      { id: examId, tid: user.id }
+      { id: examId, tid: user.id, isAdmin: user.role === 'ADMIN' ? 1 : 0 }
     );
 
     if (!exam) {
