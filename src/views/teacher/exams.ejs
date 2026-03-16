@@ -153,10 +153,10 @@
         <tr>
           <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">ID</th>
           <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Judul Ujian</th>
-          <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Mapel</th>
           <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Kelas</th>
           <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Soal</th>
           <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Durasi</th>
+          <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Pengerjaan</th>
           <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Kode</th>
           <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
           <th class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Aksi</th>
@@ -179,12 +179,10 @@
             
             <!-- Judul -->
             <td class="px-4 py-3">
-              <p class="text-sm font-semibold text-slate-900 truncate"><%= e.title %></p>
-            </td>
-            
-            <!-- Mapel -->
-            <td class="px-4 py-3 whitespace-nowrap">
-              <span class="text-sm text-slate-700"><%= e.subject_name %></span>
+              <div>
+                <p class="text-sm font-semibold text-slate-900 truncate"><%= e.title %></p>
+                <p class="text-xs text-slate-500 mt-0.5"><%= e.subject_name %></p>
+              </div>
             </td>
             
             <!-- Kelas -->
@@ -216,6 +214,23 @@
             <!-- Durasi -->
             <td class="px-4 py-3 text-center whitespace-nowrap">
               <span class="text-xs text-slate-600"><%= e.duration_minutes %> menit</span>
+            </td>
+            
+            <!-- Pengerjaan -->
+            <td class="px-4 py-3 text-center whitespace-nowrap">
+              <div class="flex flex-col items-center gap-1">
+                <div class="flex items-center gap-2">
+                  <div class="w-12 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-full transition-all duration-300" style="width: <%= e.participation_percentage %>%"></div>
+                  </div>
+                  <span class="text-xs font-semibold <%= e.participation_percentage >= 80 ? 'text-emerald-700' : e.participation_percentage >= 50 ? 'text-amber-700' : 'text-slate-600' %>">
+                    <%= e.participation_percentage %>%
+                  </span>
+                </div>
+                <div class="text-xs text-slate-500">
+                  <%= e.completed_count %>/<%= e.total_students %>
+                </div>
+              </div>
             </td>
             
             <!-- Kode -->

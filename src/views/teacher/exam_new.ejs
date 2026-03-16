@@ -199,6 +199,39 @@
     </div>
   </div>
 
+  <!-- Display Options -->
+  <div class="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-3xl p-8 border-2 border-blue-200 shadow-lg">
+    <div class="flex items-center gap-3 mb-6">
+      <span class="text-3xl">👁️</span>
+      <h2 class="text-2xl font-bold text-blue-900">Tampilan untuk Siswa</h2>
+    </div>
+    
+    <div class="flex flex-wrap gap-4">
+      <label class="flex items-center gap-3 px-5 py-3 rounded-xl border-2 border-blue-200 bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 cursor-pointer transition-all transform hover:scale-105">
+        <input type="checkbox" name="show_score_to_student" checked class="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-5 h-5" />
+        <span class="flex items-center gap-2 text-sm font-semibold text-blue-800">
+          <span class="text-xl">📊</span>
+          <span>Tampilkan nilai ke siswa</span>
+        </span>
+      </label>
+      
+      <label class="flex items-center gap-3 px-5 py-3 rounded-xl border-2 border-blue-200 bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 cursor-pointer transition-all transform hover:scale-105">
+        <input type="checkbox" name="show_review_to_student" class="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-5 h-5" />
+        <span class="flex items-center gap-2 text-sm font-semibold text-blue-800">
+          <span class="text-xl">📝</span>
+          <span>Tampilkan pembahasan & jawaban benar</span>
+        </span>
+      </label>
+    </div>
+    
+    <div class="mt-4 p-4 bg-blue-100 rounded-xl border border-blue-200">
+      <p class="text-sm text-blue-700">
+        <strong>💡 Tips:</strong> Secara default, nilai akan ditampilkan ke siswa tetapi pembahasan tidak. 
+        Aktifkan "Tampilkan pembahasan" jika ingin siswa bisa melihat jawaban yang benar setelah ujian selesai.
+      </p>
+    </div>
+  </div>
+
   <!-- Action Buttons -->
   <div class="flex gap-4 pt-4">
     <button type="submit" class="flex-1 px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600 text-white font-bold text-lg shadow-xl hover:shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center gap-3">

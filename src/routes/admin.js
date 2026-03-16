@@ -7,6 +7,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const pool = require('../db/pool');
 const { requireRole } = require('../middleware/auth');
+const { finalizeAttemptWithBackup } = require('../utils/submission-utils');
 
 const router = express.Router();
 router.use(requireRole('ADMIN'));
@@ -2270,6 +2271,324 @@ router.delete('/exams/:id', async (req, res) => {
   res.redirect('/admin/exams');
 });
 
+// ===== ADMIN EXAM MANAGEMENT (CREATE, EDIT, QUESTIONS) =====
+
+// GET Create New Exam
+router.get('/exams/new', async (req, res) => {
+  try {
+    const [subjects] = await pool.query(`SELECT * FROM subjects ORDER BY name ASC;`);
+    const [teachers] = await pool.query(`SELECT id, full_name FROM users WHERE role = 'TEACHER' AND is_active = 1 ORDER BY full_name ASC;`);
+    const [classes] = await pool.query(`SELECT * FROM classes ORDER BY name ASC;`);
+    
+    res.render('admin/exam_new', { 
+      title: 'Buat Ujian Baru', 
+      subjects, 
+      teachers, 
+      classes 
+    });
+  } catch (error) {
+    console.error(error);
+    req.flash('error', 'Gagal memuat halaman buat ujian.');
+    res.redirect('/admin/exams');
+  }
+});
+
+// POST Create New Exam
+router.post('/exams', async (req, res) => {
+  const {
+    subject_id,
+    teacher_id,
+    title,
+    description,
+    class_ids,
+    start_at,
+    end_at,
+    duration_minutes,
+    pass_score,
+    max_attempts,
+    shuffle_questions,
+    shuffle_options,
+    access_code,
+    show_score_to_student,
+    show_review_to_student
+  } = req.body;
+
+  try {
+    // Insert exam
+    const [result] = await pool.query(
+      `INSERT INTO exams
+        (subject_id, teacher_id, title, description, class_id, start_at, end_at, duration_minutes, pass_score, max_attempts, shuffle_questions, shuffle_options, access_code, show_score_to_student, show_review_to_student, is_published)
+       VALUES
+        (:subject_id,:teacher_id,:title,:description,NULL,:start_at,:end_at,:duration_minutes,:pass_score,:max_attempts,:shuffle_questions,:shuffle_options,:access_code,:show_score_to_student,:show_review_to_student,0);`,
+      {
+        subject_id,
+        teacher_id,
+        title,
+        description: description || null,
+        start_at: start_at || null,
+        end_at: end_at || null,
+        duration_minutes: Number(duration_minutes || 60),
+        pass_score: Number(pass_score || 75),
+        max_attempts: Number(max_attempts || 1),
+        shuffle_questions: shuffle_questions ? 1 : 0,
+        shuffle_options: shuffle_options ? 1 : 0,
+        access_code: access_code || null,
+        show_score_to_student: show_score_to_student ? 1 : 0,
+        show_review_to_student: show_review_to_student ? 1 : 0
+      }
+    );
+
+    const examId = result.insertId;
+
+    // Insert exam_classes if class_ids provided
+    if (class_ids && class_ids.length > 0) {
+      const classIdsArray = Array.isArray(class_ids) ? class_ids : [class_ids];
+      
+      for (const classId of classIdsArray) {
+        if (classId) {
+          await pool.query(
+            `INSERT INTO exam_classes (exam_id, class_id) VALUES (:exam_id, :class_id);`,
+            { exam_id: examId, class_id: classId }
+          );
+        }
+      }
+    }
+
+    req.flash('success', 'Ujian berhasil dibuat.');
+    res.redirect(`/admin/exams/${examId}`);
+  } catch (error) {
+    console.error(error);
+    req.flash('error', 'Gagal membuat ujian.');
+    res.redirect('/admin/exams/new');
+  }
+});
+
+// GET Edit Exam
+router.get('/exams/:id/edit', async (req, res) => {
+  const examId = req.params.id;
+
+  try {
+    // Get exam data
+    const [[exam]] = await pool.query(
+      `SELECT * FROM exams WHERE id=:id LIMIT 1;`,
+      { id: examId }
+    );
+
+    if (!exam) {
+      req.flash('error', 'Ujian tidak ditemukan.');
+      return res.redirect('/admin/exams');
+    }
+
+    // Get exam classes
+    const [examClasses] = await pool.query(
+      `SELECT class_id FROM exam_classes WHERE exam_id = :exam_id`,
+      { exam_id: examId }
+    );
+    exam.selected_classes = examClasses.map(ec => ec.class_id);
+
+    const [subjects] = await pool.query(`SELECT * FROM subjects ORDER BY name ASC;`);
+    const [teachers] = await pool.query(`SELECT id, full_name FROM users WHERE role = 'TEACHER' AND is_active = 1 ORDER BY full_name ASC;`);
+    const [classes] = await pool.query(`SELECT * FROM classes ORDER BY name ASC;`);
+
+    res.render('admin/exam_edit', { 
+      title: `Edit Ujian: ${exam.title}`, 
+      exam, 
+      subjects, 
+      teachers, 
+      classes 
+    });
+  } catch (error) {
+    console.error(error);
+    req.flash('error', 'Gagal memuat halaman edit ujian.');
+    res.redirect('/admin/exams');
+  }
+});
+
+// PUT Update Exam
+router.put('/exams/:id', async (req, res) => {
+  const examId = req.params.id;
+  const {
+    subject_id,
+    teacher_id,
+    title,
+    description,
+    class_ids,
+    start_at,
+    end_at,
+    duration_minutes,
+    pass_score,
+    max_attempts,
+    shuffle_questions,
+    shuffle_options,
+    access_code,
+    show_score_to_student,
+    show_review_to_student
+  } = req.body;
+
+  try {
+    // Update exam
+    await pool.query(
+      `UPDATE exams SET
+        subject_id=:subject_id,
+        teacher_id=:teacher_id,
+        title=:title,
+        description=:description,
+        start_at=:start_at,
+        end_at=:end_at,
+        duration_minutes=:duration_minutes,
+        pass_score=:pass_score,
+        max_attempts=:max_attempts,
+        shuffle_questions=:shuffle_questions,
+        shuffle_options=:shuffle_options,
+        access_code=:access_code,
+        show_score_to_student=:show_score_to_student,
+        show_review_to_student=:show_review_to_student
+       WHERE id=:id;`,
+      {
+        id: examId,
+        subject_id,
+        teacher_id,
+        title,
+        description: description || null,
+        start_at: start_at || null,
+        end_at: end_at || null,
+        duration_minutes: Number(duration_minutes || 60),
+        pass_score: Number(pass_score || 75),
+        max_attempts: Number(max_attempts || 1),
+        shuffle_questions: shuffle_questions ? 1 : 0,
+        shuffle_options: shuffle_options ? 1 : 0,
+        access_code: access_code || null,
+        show_score_to_student: show_score_to_student ? 1 : 0,
+        show_review_to_student: show_review_to_student ? 1 : 0
+      }
+    );
+
+    // Update exam_classes
+    await pool.query(`DELETE FROM exam_classes WHERE exam_id=:exam_id;`, { exam_id: examId });
+
+    if (class_ids && class_ids.length > 0) {
+      const classIdsArray = Array.isArray(class_ids) ? class_ids : [class_ids];
+      
+      for (const classId of classIdsArray) {
+        if (classId) {
+          await pool.query(
+            `INSERT INTO exam_classes (exam_id, class_id) VALUES (:exam_id, :class_id);`,
+            { exam_id: examId, class_id: classId }
+          );
+        }
+      }
+    }
+
+    req.flash('success', 'Ujian berhasil diperbarui.');
+    res.redirect(`/admin/exams/${examId}`);
+  } catch (error) {
+    console.error(error);
+    req.flash('error', 'Gagal memperbarui ujian.');
+    res.redirect(`/admin/exams/${examId}/edit`);
+  }
+});
+
+// GET Exam Detail
+router.get('/exams/:id', async (req, res) => {
+  const examId = req.params.id;
+
+  try {
+    const [[exam]] = await pool.query(
+      `SELECT e.*, s.name AS subject_name, u.full_name AS teacher_name
+       FROM exams e
+       LEFT JOIN subjects s ON s.id = e.subject_id
+       LEFT JOIN users u ON u.id = e.teacher_id
+       WHERE e.id = :id
+       LIMIT 1;`,
+      { id: examId }
+    );
+
+    if (!exam) {
+      req.flash('error', 'Ujian tidak ditemukan.');
+      return res.redirect('/admin/exams');
+    }
+
+    // Get questions
+    const [questions] = await pool.query(
+      `SELECT q.*, 
+              (SELECT COUNT(*) FROM options WHERE question_id = q.id) as option_count
+       FROM questions q 
+       WHERE q.exam_id = :exam_id 
+       ORDER BY q.id ASC`,
+      { exam_id: examId }
+    );
+
+    // Get exam classes
+    const [examClasses] = await pool.query(
+      `SELECT c.name 
+       FROM exam_classes ec
+       JOIN classes c ON c.id = ec.class_id
+       WHERE ec.exam_id = :exam_id
+       ORDER BY c.name`,
+      { exam_id: examId }
+    );
+    exam.class_names = examClasses.map(ec => ec.name).join(', ') || 'Semua Kelas';
+
+    // Get participation statistics (same logic as teacher)
+    const [examClassesCount] = await pool.query(
+      `SELECT COUNT(*) as count FROM exam_classes WHERE exam_id = :exam_id`,
+      { exam_id: examId }
+    );
+    
+    let totalStudentsQuery;
+    let queryParams = { exam_id: examId };
+    
+    if (examClassesCount[0].count > 0) {
+      totalStudentsQuery = `
+        SELECT COUNT(DISTINCT u.id) as total 
+        FROM users u
+        INNER JOIN exam_classes ec ON ec.class_id = u.class_id
+        WHERE u.role = 'STUDENT' 
+        AND u.is_active = 1 
+        AND ec.exam_id = :exam_id
+      `;
+    } else if (exam.class_id) {
+      totalStudentsQuery = `
+        SELECT COUNT(*) as total 
+        FROM users 
+        WHERE role = 'STUDENT' 
+        AND is_active = 1 
+        AND class_id = :class_id
+      `;
+      queryParams.class_id = exam.class_id;
+    } else {
+      totalStudentsQuery = `
+        SELECT COUNT(*) as total 
+        FROM users 
+        WHERE role = 'STUDENT' 
+        AND is_active = 1
+      `;
+    }
+    
+    const [[totalStudentsResult]] = await pool.query(totalStudentsQuery, queryParams);
+    const [[completedResult]] = await pool.query(
+      `SELECT COUNT(DISTINCT student_id) as completed FROM attempts WHERE exam_id = :exam_id`,
+      { exam_id: examId }
+    );
+    
+    exam.completed_count = completedResult.completed || 0;
+    exam.total_students = totalStudentsResult.total || 0;
+    exam.not_completed_count = exam.total_students - exam.completed_count;
+    exam.completed_percentage = exam.total_students > 0 ? Math.round((exam.completed_count / exam.total_students) * 100) : 0;
+    exam.not_completed_percentage = 100 - exam.completed_percentage;
+
+    res.render('admin/exam_detail', { 
+      title: `Ujian: ${exam.title}`, 
+      exam, 
+      questions 
+    });
+  } catch (error) {
+    console.error(error);
+    req.flash('error', 'Gagal memuat detail ujian.');
+    res.redirect('/admin/exams');
+  }
+});
+
 // Bulk delete exams
 router.post('/exams/bulk-delete', async (req, res) => {
   let exam_ids = req.body.exam_ids;
@@ -2767,8 +3086,6 @@ router.post('/attempts/:id/reset', async (req, res) => {
   return res.redirect('/admin/grades');
 });
 
-module.exports = router;
-
 
 // ===== ASSIGNMENTS MANAGEMENT =====
 
@@ -3119,3 +3436,281 @@ router.post('/question-bank/bulk-delete', async (req, res) => {
   
   res.redirect('/admin/question-bank');
 });
+// Failed Submissions Management
+router.get('/failed-submissions', async (req, res) => {
+  try {
+    console.log('=== Failed Submissions Route ===');
+    console.log('User:', req.session.user ? req.session.user.username : 'No user');
+    
+    // Check if the required columns exist first
+    const [columns] = await pool.query(`SHOW COLUMNS FROM attempts LIKE 'submission_status'`);
+    if (columns.length === 0) {
+      console.log('submission_status column not found');
+      req.flash('error', 'Sistem recovery belum diaktifkan. Silakan jalankan database migration terlebih dahulu.');
+      return res.redirect('/admin');
+    }
+
+    const [failedAttempts] = await pool.query(`
+      SELECT a.id, a.exam_id, a.student_id, a.status, a.submission_status,
+             a.started_at, a.finished_at,
+             u.full_name as student_name, u.username as student_username,
+             e.title as exam_title, s.name as subject_name,
+             sb.id as backup_id, sb.created_at as backup_created
+      FROM attempts a
+      JOIN users u ON u.id = a.student_id
+      JOIN exams e ON e.id = a.exam_id
+      JOIN subjects s ON s.id = e.subject_id
+      LEFT JOIN submission_backups sb ON sb.attempt_id = a.id AND sb.status = 'ACTIVE'
+      WHERE a.submission_status = 'FAILED'
+      ORDER BY a.started_at DESC
+    `);
+
+    console.log('Query executed, found:', failedAttempts.length, 'failed attempts');
+
+    res.render('admin/failed_submissions', {
+      title: 'Submission Gagal',
+      user: req.session.user,
+      failedAttempts: failedAttempts || []
+    });
+  } catch (error) {
+    console.error('Error in failed-submissions route:', error);
+    req.flash('error', 'Gagal memuat data submission yang gagal: ' + error.message);
+    res.redirect('/admin');
+  }
+});
+
+// Recover Failed Submission
+router.post('/failed-submissions/:id/recover', async (req, res) => {
+  const attemptId = req.params.id;
+  
+  try {
+    const [[attempt]] = await pool.query(`
+      SELECT a.*, sb.backup_data, sb.id as backup_id
+      FROM attempts a
+      LEFT JOIN submission_backups sb ON sb.attempt_id = a.id AND sb.status = 'ACTIVE'
+      WHERE a.id = :aid AND a.submission_status = 'FAILED'
+    `, { aid: attemptId });
+
+    if (!attempt) {
+      req.flash('error', 'Attempt tidak ditemukan atau bukan status FAILED.');
+      return res.redirect('/admin/failed-submissions');
+    }
+
+    if (!attempt.backup_data) {
+      req.flash('error', 'Backup data tidak ditemukan untuk attempt ini.');
+      return res.redirect('/admin/failed-submissions');
+    }
+
+    // Parse backup data
+    const backupData = JSON.parse(attempt.backup_data);
+    
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Restore answers from backup
+      for (const answer of backupData.answers) {
+        await connection.query(`
+          UPDATE attempt_answers 
+          SET option_id = :oid, is_correct = :isc, answered_at = :at
+          WHERE attempt_id = :aid AND question_id = :qid
+        `, {
+          oid: answer.option_id,
+          isc: answer.is_correct,
+          at: answer.answered_at,
+          aid: attemptId,
+          qid: answer.question_id
+        });
+      }
+
+      // Recalculate and finalize
+      const [[sum]] = await connection.query(`
+        SELECT
+            SUM(q.points) AS total_points,
+            SUM(CASE WHEN aa.is_correct=1 THEN q.points ELSE 0 END) AS score_points,
+            SUM(CASE WHEN aa.is_correct=1 THEN 1 ELSE 0 END) AS correct_count,
+            SUM(CASE WHEN aa.option_id IS NOT NULL AND aa.is_correct=0 THEN 1 ELSE 0 END) AS wrong_count
+         FROM attempt_answers aa
+         JOIN questions q ON q.id=aa.question_id
+         WHERE aa.attempt_id=:aid;
+      `, { aid: attemptId });
+
+      const total_points = Number(sum.total_points || 0);
+      const score_points = Number(sum.score_points || 0);
+      const correct_count = Number(sum.correct_count || 0);
+      const wrong_count = Number(sum.wrong_count || 0);
+      const score = total_points > 0 ? Math.round((score_points / total_points) * 100) : 0;
+
+      // Update attempt status
+      await connection.query(`
+        UPDATE attempts
+        SET finished_at = NOW(), status = 'SUBMITTED', submission_status = 'SUBMITTED',
+            score = :score, total_points = :total_points, 
+            correct_count = :correct_count, wrong_count = :wrong_count
+        WHERE id = :aid
+      `, { score, total_points, correct_count, wrong_count, aid: attemptId });
+
+      // Mark backup as restored
+      await connection.query(`
+        UPDATE submission_backups 
+        SET status = 'RESTORED', restored_at = NOW()
+        WHERE id = :bid
+      `, { bid: attempt.backup_id });
+
+      await connection.commit();
+      
+      req.flash('success', `Submission berhasil dipulihkan. Nilai: ${score}`);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+  } catch (error) {
+    console.error('Recovery failed:', error);
+    req.flash('error', 'Gagal memulihkan submission.');
+  }
+  
+  res.redirect('/admin/failed-submissions');
+});
+
+// Retry Failed Submission
+router.post('/failed-submissions/:id/retry', async (req, res) => {
+  const attemptId = req.params.id;
+  
+  try {
+    const [[attempt]] = await pool.query(`
+      SELECT a.student_id, a.exam_id
+      FROM attempts a
+      WHERE a.id = :aid AND a.submission_status = 'FAILED'
+    `, { aid: attemptId });
+
+    if (!attempt) {
+      req.flash('error', 'Attempt tidak ditemukan atau bukan status FAILED.');
+      return res.redirect('/admin/failed-submissions');
+    }
+
+    // Reset status and retry finalization
+    await pool.query(`
+      UPDATE attempts 
+      SET submission_status = 'PENDING'
+      WHERE id = :aid
+    `, { aid: attemptId });
+
+    // Try to finalize again
+    await finalizeAttemptWithBackup(attemptId, attempt.student_id, attempt.exam_id);
+    
+    req.flash('success', 'Submission berhasil diproses ulang.');
+  } catch (error) {
+    console.error('Retry failed:', error);
+    req.flash('error', 'Gagal memproses ulang submission.');
+  }
+  
+  res.redirect('/admin/failed-submissions');
+});
+
+// ===== RANKING UPDATE =====
+router.post('/update-ranking', async (req, res) => {
+  try {
+    // Clear the banner cache to force refresh of ranking data
+    if (router.bannerCache) {
+      delete router.bannerCache;
+    }
+    
+    // Also clear auth router cache if it exists
+    const authRouter = require('./auth');
+    if (authRouter.bannerCache) {
+      delete authRouter.bannerCache;
+    }
+    
+    // Force a fresh calculation by calling the banner data endpoint
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+
+    // Pre-calculate and cache new ranking data
+    const [activeClasses] = await pool.query(`
+      SELECT 
+        c.name as class_name,
+        COUNT(DISTINCT at.id) + COUNT(DISTINCT mr.id) as activity_score
+      FROM classes c
+      LEFT JOIN users u ON u.class_id = c.id AND u.role = 'STUDENT'
+      LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at >= :weekAgo
+      LEFT JOIN material_reads mr ON mr.student_id = u.id AND mr.created_at >= :weekAgo
+      GROUP BY c.id, c.name
+      HAVING activity_score > 0
+      ORDER BY activity_score DESC
+      LIMIT 3;
+    `, { weekAgo: oneWeekAgoStr });
+
+    const [activeStudents] = await pool.query(`
+      SELECT 
+        u.full_name,
+        c.name as class_name,
+        COUNT(DISTINCT at.id) + COUNT(DISTINCT mr.id) + COUNT(DISTINCT asub.id) as activity_score
+      FROM users u
+      LEFT JOIN classes c ON c.id = u.class_id
+      LEFT JOIN attempts at ON at.student_id = u.id AND at.created_at >= :weekAgo
+      LEFT JOIN material_reads mr ON mr.student_id = u.id AND mr.created_at >= :weekAgo
+      LEFT JOIN assignment_submissions asub ON asub.student_id = u.id AND asub.created_at >= :weekAgo
+      WHERE u.role = 'STUDENT' AND u.is_active = 1
+      GROUP BY u.id, u.full_name, c.name
+      HAVING activity_score > 0
+      ORDER BY activity_score DESC
+      LIMIT 3;
+    `, { weekAgo: oneWeekAgoStr });
+
+    const [activeTeachers] = await pool.query(`
+      SELECT 
+        u.full_name,
+        COUNT(DISTINCT e.id) + COUNT(DISTINCT m.id) + COUNT(DISTINCT a.id) as activity_score
+      FROM users u
+      LEFT JOIN exams e ON e.teacher_id = u.id AND e.created_at >= :weekAgo
+      LEFT JOIN materials m ON m.teacher_id = u.id AND m.created_at >= :weekAgo
+      LEFT JOIN assignments a ON a.teacher_id = u.id AND a.created_at >= :weekAgo
+      WHERE u.role = 'TEACHER' AND u.is_active = 1
+      GROUP BY u.id, u.full_name
+      HAVING activity_score > 0
+      ORDER BY activity_score DESC
+      LIMIT 3;
+    `, { weekAgo: oneWeekAgoStr });
+
+    // Update cache in auth router
+    const responseData = {
+      success: true,
+      data: {
+        activeClasses: activeClasses.map(c => c.class_name),
+        activeStudents: activeStudents.map(s => ({ name: s.full_name, class: s.class_name })),
+        activeTeachers: activeTeachers.map(t => t.full_name),
+        weekPeriod: `${oneWeekAgoStr} - ${new Date().toISOString().split('T')[0]}`
+      }
+    };
+
+    // Set new cache
+    authRouter.bannerCache = {
+      data: responseData,
+      timestamp: Date.now()
+    };
+
+    res.json({
+      success: true,
+      message: 'Data peringkat berhasil diperbarui',
+      stats: {
+        activeClasses: activeClasses.length,
+        activeStudents: activeStudents.length,
+        activeTeachers: activeTeachers.length,
+        lastUpdated: new Date().toLocaleString('id-ID')
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating ranking data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal memperbarui data peringkat: ' + error.message
+    });
+  }
+});
+
+module.exports = router;

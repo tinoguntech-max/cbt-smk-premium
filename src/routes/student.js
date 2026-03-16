@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { requireRole } = require('../middleware/auth');
+const { finalizeAttemptWithBackup } = require('../utils/submission-utils');
 
 const router = express.Router();
 router.use(requireRole('STUDENT'));
@@ -396,7 +397,7 @@ router.post('/attempts/:id/violation', async (req, res) => {
     const count = Number(cnt?.c || 0);
     if (count >= MAX_VIOLATIONS) {
       try {
-        await finalizeAttempt(attemptId);
+        await finalizeAttemptWithBackup(attemptId, attempt.student_id, attempt.exam_id);
       } catch (e) {
         console.error('Finalize after violations failed:', e);
       }
@@ -408,57 +409,96 @@ router.post('/attempts/:id/violation', async (req, res) => {
   return res.json({ ok: true, logged: true, max: MAX_VIOLATIONS, count: null, locked: false });
 });
 
-async function finalizeAttempt(attemptId) {
-  const [[sum]] = await pool.query(
-    `SELECT
-        SUM(q.points) AS total_points,
-        SUM(CASE WHEN aa.is_correct=1 THEN q.points ELSE 0 END) AS score_points,
-        SUM(CASE WHEN aa.is_correct=1 THEN 1 ELSE 0 END) AS correct_count,
-        SUM(CASE WHEN aa.option_id IS NOT NULL AND aa.is_correct=0 THEN 1 ELSE 0 END) AS wrong_count
-     FROM attempt_answers aa
-     JOIN questions q ON q.id=aa.question_id
-     WHERE aa.attempt_id=:aid;`,
-    { aid: attemptId }
-  );
-  const total_points = Number(sum.total_points || 0);
-  const score_points = Number(sum.score_points || 0);
-  const correct_count = Number(sum.correct_count || 0);
-  const wrong_count = Number(sum.wrong_count || 0);
-  const score = total_points > 0 ? Math.round((score_points / total_points) * 100) : 0;
-
-  await pool.query(
-    `UPDATE attempts
-     SET finished_at=NOW(), status='SUBMITTED', score=:score, total_points=:total_points, correct_count=:correct_count, wrong_count=:wrong_count
-     WHERE id=:aid;`,
-    { score, total_points, correct_count, wrong_count, aid: attemptId }
-  );
-}
-
 router.post('/attempts/:id/submit', async (req, res) => {
   const user = req.session.user;
   const attemptId = req.params.id;
+  const clientBackup = req.body.backup_data; // Client-side backup
+  const retryCount = parseInt(req.headers['x-retry-count'] || '0');
+
+  console.log(`📥 Submission received for attempt ${attemptId}, retry: ${retryCount}`);
 
   const [[attempt]] = await pool.query(
-    `SELECT a.id, a.status
+    `SELECT a.id, a.status, a.exam_id, a.submission_status
      FROM attempts a
      WHERE a.id=:aid AND a.student_id=:sid
      LIMIT 1;`,
     { aid: attemptId, sid: user.id }
   );
+  
   if (!attempt) {
     req.flash('error', 'Attempt tidak ditemukan.');
     return res.redirect('/student/exams');
   }
 
-  if (attempt.status === 'IN_PROGRESS') {
-    try {
-      await finalizeAttempt(attemptId);
-      req.flash('success', 'Jawaban berhasil dikumpulkan.');
-    } catch (e) {
-      console.error(e);
-      req.flash('error', 'Gagal submit.');
-    }
+  // If already submitted, just redirect to result
+  if (attempt.submission_status === 'SUBMITTED') {
+    console.log(`✅ Attempt ${attemptId} already submitted`);
+    req.flash('info', 'Jawaban sudah dikumpulkan sebelumnya.');
+    return res.redirect(`/student/attempts/${attemptId}/result`);
   }
+
+  if (attempt.status === 'IN_PROGRESS' && attempt.submission_status !== 'SUBMITTING') {
+    try {
+      // Log client backup if provided
+      if (clientBackup) {
+        console.log(`📦 Client backup received: ${clientBackup.answers?.length || 0} answers`);
+      }
+      
+      await finalizeAttemptWithBackup(attemptId, user.id, attempt.exam_id);
+      
+      console.log(`✅ Attempt ${attemptId} submitted successfully`);
+      req.flash('success', 'Jawaban berhasil dikumpulkan.');
+      
+      // Return JSON for AJAX requests
+      if (req.headers['content-type']?.includes('application/json')) {
+        return res.json({ success: true, message: 'Submission successful' });
+      }
+      
+    } catch (e) {
+      console.error(`❌ Submission failed for attempt ${attemptId}:`, e);
+      
+      // Update status to FAILED for recovery
+      await pool.query(
+        `UPDATE attempts SET submission_status = 'FAILED' WHERE id = :aid`,
+        { aid: attemptId }
+      );
+      
+      // Store client backup if provided
+      if (clientBackup && clientBackup.answers) {
+        try {
+          await pool.query(
+            `INSERT INTO submission_backups (attempt_id, student_id, exam_id, backup_data, status)
+             VALUES (:aid, :sid, :eid, :data, 'ACTIVE')
+             ON DUPLICATE KEY UPDATE backup_data = :data`,
+            {
+              aid: attemptId,
+              sid: user.id,
+              eid: attempt.exam_id,
+              data: JSON.stringify(clientBackup)
+            }
+          );
+          console.log(`💾 Client backup stored for attempt ${attemptId}`);
+        } catch (backupError) {
+          console.error('Failed to store client backup:', backupError);
+        }
+      }
+      
+      req.flash('error', 'Gagal submit jawaban. Jawaban Anda telah disimpan dan dapat dipulihkan oleh admin. Silakan hubungi guru atau admin.');
+      
+      // Return JSON error for AJAX requests
+      if (req.headers['content-type']?.includes('application/json')) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Submission failed',
+          retry: retryCount < 3 
+        });
+      }
+    }
+  } else if (attempt.submission_status === 'SUBMITTING') {
+    console.log(`⏳ Attempt ${attemptId} is already being submitted`);
+    req.flash('info', 'Submission sedang diproses. Mohon tunggu...');
+  }
+  
   res.redirect(`/student/attempts/${attemptId}/result`);
 });
 
@@ -467,7 +507,7 @@ router.get('/attempts/:id/result', async (req, res) => {
   const attemptId = req.params.id;
 
   const [[attempt]] = await pool.query(
-    `SELECT a.*, e.title, e.pass_score, s.name AS subject_name
+    `SELECT a.*, e.title, e.pass_score, e.show_score_to_student, e.show_review_to_student, s.name AS subject_name
      FROM attempts a
      JOIN exams e ON e.id=a.exam_id
      JOIN subjects s ON s.id=e.subject_id
@@ -478,16 +518,21 @@ router.get('/attempts/:id/result', async (req, res) => {
 
   if (!attempt) return res.status(404).render('error', { title: 'Tidak ditemukan', message: 'Hasil tidak ditemukan.', user });
 
-  const [review] = await pool.query(
-    `SELECT q.id AS question_id, q.question_text, q.question_image, q.points, aa.is_correct, aa.option_id,
-            (SELECT CONCAT(o.option_label,'. ', o.option_text) FROM options o WHERE o.id=aa.option_id) AS chosen_text,
-            (SELECT CONCAT(o2.option_label,'. ', o2.option_text) FROM options o2 WHERE o2.question_id=q.id AND o2.is_correct=1 LIMIT 1) AS correct_text
-     FROM attempt_answers aa
-     JOIN questions q ON q.id=aa.question_id
-     WHERE aa.attempt_id=:aid
-     ORDER BY aa.id ASC;`,
-    { aid: attemptId }
-  );
+  // Only get review data if teacher allows it
+  let review = [];
+  if (attempt.show_review_to_student) {
+    const [reviewData] = await pool.query(
+      `SELECT q.id AS question_id, q.question_text, q.question_image, q.points, aa.is_correct, aa.option_id,
+              (SELECT CONCAT(o.option_label,'. ', o.option_text) FROM options o WHERE o.id=aa.option_id) AS chosen_text,
+              (SELECT CONCAT(o2.option_label,'. ', o2.option_text) FROM options o2 WHERE o2.question_id=q.id AND o2.is_correct=1 LIMIT 1) AS correct_text
+       FROM attempt_answers aa
+       JOIN questions q ON q.id=aa.question_id
+       WHERE aa.attempt_id=:aid
+       ORDER BY aa.id ASC;`,
+      { aid: attemptId }
+    );
+    review = reviewData;
+  }
 
   res.render('student/attempt_result', { title: 'Hasil Ujian', attempt, review });
 });

@@ -16,7 +16,13 @@
           <p class="mt-1 text-indigo-100">Lihat dan kelola semua ujian yang dibuat oleh guru</p>
         </div>
       </div>
-      <div>
+      <div class="flex gap-3">
+        <a href="/admin/exams/new" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100/80 backdrop-blur-sm hover:bg-emerald-200/90 text-emerald-800 font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Buat Ujian Baru
+        </a>
         <a href="/admin" class="inline-flex items-center gap-2 px-4 py-2 bg-orange-100/80 backdrop-blur-sm hover:bg-orange-200/90 text-orange-800 font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -345,42 +351,55 @@
                 <% } %>
               </td>
               <td class="px-4 py-4">
-                <div class="flex items-center gap-2">
-                  <button 
-                    onclick="viewExamDetail(<%= exam.id %>)"
-                    class="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
-                    title="Lihat Detail"
-                  >
-                    Detail
-                  </button>
-                  <form method="POST" action="/admin/exams/<%= exam.id %>/toggle-publish" class="inline">
-                    <% if (exam.is_published) { %>
-                      <button 
-                        type="submit"
-                        class="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
-                        title="Unpublish"
-                      >
-                        Unpublish
-                      </button>
-                    <% } else { %>
-                      <button 
-                        type="submit"
-                        class="px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
-                        title="Publish"
-                      >
-                        Publish
-                      </button>
-                    <% } %>
-                  </form>
-                  <form method="POST" action="/admin/exams/<%= exam.id %>?_method=DELETE" class="inline" onsubmit="return confirm('Yakin ingin menghapus ujian ini? Semua data terkait akan terhapus.');">
+                <div class="space-y-1">
+                  <!-- Baris 1: Detail & Edit -->
+                  <div class="flex items-center gap-1">
                     <button 
-                      type="submit"
-                      class="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-semibold rounded-lg shadow-md transform hover:scale-105 transition-all"
-                      title="Hapus"
+                      onclick="viewExamDetail(<%= exam.id %>)"
+                      class="px-2 py-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs font-semibold rounded-md shadow-sm transform hover:scale-105 transition-all"
+                      title="Lihat Detail"
                     >
-                      Hapus
+                      Detail
                     </button>
-                  </form>
+                    <a 
+                      href="/admin/exams/<%= exam.id %>/edit"
+                      class="px-2 py-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-semibold rounded-md shadow-sm transform hover:scale-105 transition-all"
+                      title="Edit Ujian"
+                    >
+                      Edit
+                    </a>
+                  </div>
+                  <!-- Baris 2: Publish & Delete -->
+                  <div class="flex items-center gap-1">
+                    <form method="POST" action="/admin/exams/<%= exam.id %>/toggle-publish" class="inline">
+                      <% if (exam.is_published) { %>
+                        <button 
+                          type="submit"
+                          class="px-2 py-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-xs font-semibold rounded-md shadow-sm transform hover:scale-105 transition-all"
+                          title="Unpublish"
+                        >
+                          Unpublish
+                        </button>
+                      <% } else { %>
+                        <button 
+                          type="submit"
+                          class="px-2 py-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-xs font-semibold rounded-md shadow-sm transform hover:scale-105 transition-all"
+                          title="Publish"
+                        >
+                          Publish
+                        </button>
+                      <% } %>
+                    </form>
+                    <form method="POST" action="/admin/exams/<%= exam.id %>?_method=DELETE" class="inline" onsubmit="return confirm('Yakin ingin menghapus ujian ini? Semua data terkait akan terhapus.');">
+                      <button 
+                        type="submit"
+                        class="px-2 py-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-semibold rounded-md shadow-sm transform hover:scale-105 transition-all"
+                        title="Hapus"
+                      >
+                        Hapus
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </td>
             </tr>

@@ -144,6 +144,63 @@
 </div>
 
 <script>
+  // ===== CLIENT-SIDE BACKUP SYSTEM =====
+  const BACKUP_KEY = 'exam_backup_<%= attempt.id %>';
+  const SUBMISSION_RETRY_KEY = 'submission_retry_<%= attempt.id %>';
+  
+  // Save answers to LocalStorage
+  function saveBackupToLocalStorage() {
+    const answers = [];
+    document.querySelectorAll('input[type=radio]:checked').forEach(radio => {
+      answers.push({
+        question_id: Number(radio.getAttribute('data-question')),
+        option_id: Number(radio.value),
+        answered_at: new Date().toISOString()
+      });
+    });
+    
+    const backup = {
+      attempt_id: <%= attempt.id %>,
+      student_id: <%= attempt.student_id %>,
+      exam_id: <%= attempt.exam_id %>,
+      answers: answers,
+      backup_timestamp: new Date().toISOString()
+    };
+    
+    try {
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(backup));
+      console.log('✅ Backup saved to LocalStorage:', answers.length, 'answers');
+    } catch (e) {
+      console.error('❌ Failed to save backup:', e);
+    }
+  }
+  
+  // Load backup from LocalStorage on page load
+  function loadBackupFromLocalStorage() {
+    try {
+      const backupStr = localStorage.getItem(BACKUP_KEY);
+      if (backupStr) {
+        const backup = JSON.parse(backupStr);
+        console.log('📦 Found backup in LocalStorage:', backup.answers.length, 'answers');
+        return backup;
+      }
+    } catch (e) {
+      console.error('❌ Failed to load backup:', e);
+    }
+    return null;
+  }
+  
+  // Clear backup after successful submission
+  function clearBackup() {
+    try {
+      localStorage.removeItem(BACKUP_KEY);
+      localStorage.removeItem(SUBMISSION_RETRY_KEY);
+      console.log('🗑️ Backup cleared from LocalStorage');
+    } catch (e) {
+      console.error('❌ Failed to clear backup:', e);
+    }
+  }
+  
   // Timer
   const startedAt = new Date('<%= attempt.started_at.toISOString ? attempt.started_at.toISOString() : attempt.started_at %>');
   const durationMinutes = Number('<%= attempt.duration_minutes %>');
@@ -197,9 +254,9 @@
       `;
       document.body.appendChild(notification);
       
-      // Submit form setelah delay singkat untuk memastikan notifikasi terlihat
+      // Use retry mechanism for auto-submit
       setTimeout(() => {
-        document.getElementById('submitForm').submit();
+        submitWithRetry();
       }, 1500);
     }
   }
@@ -266,6 +323,138 @@
     });
   }
   updateAnswered();
+
+  // Autosave jawaban
+  document.querySelectorAll('input[type=radio]').forEach(r => {
+    r.addEventListener('change', async () => {
+      const qid = r.getAttribute('data-question');
+      const oid = r.value;
+      updateAnswered();
+
+      // Save to LocalStorage immediately
+      saveBackupToLocalStorage();
+
+      try {
+        await fetch('/student/attempts/<%= attempt.id %>/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_id: Number(qid), option_id: Number(oid) })
+        });
+      } catch (e) {
+        console.error('Autosave failed:', e);
+        toast('⚠️ Koneksi terputus. Jawaban tersimpan di perangkat Anda.');
+      }
+    });
+  });
+
+  // ===== SUBMISSION WITH RETRY MECHANISM =====
+  let isSubmitting = false;
+  
+  async function submitWithRetry(maxRetries = 3) {
+    if (isSubmitting) {
+      console.log('⏳ Submission already in progress');
+      return;
+    }
+    
+    isSubmitting = true;
+    
+    // Save final backup before submission
+    saveBackupToLocalStorage();
+    
+    let retryCount = 0;
+    let lastError = null;
+    
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`🔄 Submission attempt ${retryCount + 1}/${maxRetries}`);
+        
+        const response = await fetch('/student/attempts/<%= attempt.id %>/submit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Retry-Count': retryCount.toString()
+          },
+          body: JSON.stringify({
+            backup_data: loadBackupFromLocalStorage()
+          })
+        });
+        
+        if (response.ok || response.status === 302) {
+          console.log('✅ Submission successful!');
+          clearBackup();
+          
+          // Redirect to result page
+          window.location.href = `/student/attempts/<%= attempt.id %>/result`;
+          return;
+        }
+        
+        // If server returns error, throw to trigger retry
+        throw new Error(`Server returned ${response.status}`);
+        
+      } catch (error) {
+        lastError = error;
+        retryCount++;
+        
+        console.error(`❌ Submission attempt ${retryCount} failed:`, error);
+        
+        if (retryCount < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, retryCount - 1) * 1000;
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          
+          toast(`Gagal submit, mencoba lagi... (${retryCount}/${maxRetries})`);
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // All retries failed
+    console.error('❌ All submission attempts failed');
+    isSubmitting = false;
+    
+    // Show error message with recovery instructions
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm';
+    errorDiv.innerHTML = `
+      <div class="rounded-2xl border-2 border-rose-300 bg-gradient-to-br from-rose-50 to-pink-50 p-8 shadow-2xl max-w-md mx-4">
+        <div class="text-6xl mb-4 text-center">⚠️</div>
+        <h2 class="text-2xl font-bold text-rose-900 mb-2 text-center">Submission Gagal</h2>
+        <p class="text-rose-700 mb-4 text-center">
+          Jawaban Anda telah tersimpan dengan aman di perangkat dan server. 
+          Silakan hubungi guru atau admin untuk memulihkan jawaban Anda.
+        </p>
+        <div class="bg-white rounded-lg p-4 mb-4 text-sm">
+          <div class="font-bold text-gray-900 mb-2">📋 Informasi untuk Admin:</div>
+          <div class="text-gray-700">
+            <div>Attempt ID: <span class="font-mono font-bold"><%= attempt.id %></span></div>
+            <div>Backup tersimpan di LocalStorage</div>
+            <div>Waktu: ${new Date().toLocaleString('id-ID')}</div>
+          </div>
+        </div>
+        <button onclick="location.reload()" 
+                class="w-full rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3 shadow-lg">
+          🔄 Coba Lagi
+        </button>
+        <button onclick="window.location.href='/student/exams'" 
+                class="w-full mt-2 rounded-xl bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 shadow-lg">
+          ← Kembali ke Daftar Ujian
+        </button>
+      </div>
+    `;
+    document.body.appendChild(errorDiv);
+  }
+  
+  // Override form submission to use retry mechanism
+  const submitForm = document.getElementById('submitForm');
+  submitForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    
+    const confirmed = confirm('Yakin ingin mengumpulkan jawaban? Pastikan semua soal sudah dijawab.');
+    if (confirmed) {
+      submitWithRetry();
+    }
+  });
 
   // Autosave jawaban
   document.querySelectorAll('input[type=radio]').forEach(r => {

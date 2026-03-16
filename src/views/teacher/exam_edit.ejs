@@ -131,6 +131,27 @@
     </div>
   </div>
 
+  <!-- Display Options -->
+  <div class="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-6 shadow-soft">
+    <h2 class="text-lg font-semibold text-blue-900 mb-4">👁️ Tampilan untuk Siswa</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      <label class="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-white cursor-pointer hover:bg-blue-50 transition-colors">
+        <input type="checkbox" name="show_score_to_student" value="1" <%= exam.show_score_to_student ? 'checked' : '' %> class="w-5 h-5 accent-blue-500" />
+        <span class="text-sm font-medium text-blue-900">📊 Tampilkan Nilai</span>
+      </label>
+      
+      <label class="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-white cursor-pointer hover:bg-blue-50 transition-colors">
+        <input type="checkbox" name="show_review_to_student" value="1" <%= exam.show_review_to_student ? 'checked' : '' %> class="w-5 h-5 accent-blue-500" />
+        <span class="text-sm font-medium text-blue-900">📝 Tampilkan Pembahasan</span>
+      </label>
+    </div>
+    <div class="mt-3 p-3 bg-blue-100 rounded-lg">
+      <p class="text-xs text-blue-700">
+        💡 Kontrol apa yang bisa dilihat siswa setelah ujian selesai
+      </p>
+    </div>
+  </div>
+
   <!-- Keamanan -->
   <div class="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-rose-100 p-6 shadow-soft">
     <h2 class="text-lg font-semibold text-rose-900 mb-4">🔒 Keamanan</h2>

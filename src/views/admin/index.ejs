@@ -56,4 +56,72 @@
     <div class="mt-1 text-xl font-semibold text-teal-900">Rekap Penggunaan LMS</div>
     <div class="mt-2 text-teal-700 text-sm">Statistik guru, siswa, kelas teraktif.</div>
   </a>
+  <a href="/admin/failed-submissions" class="rounded-2xl border border-red-300 bg-gradient-to-br from-red-100 to-red-200 hover:from-red-200 hover:to-red-300 shadow-soft p-5 transition-all">
+    <div class="text-sm text-red-700 font-medium">🚨 Recovery</div>
+    <div class="mt-1 text-xl font-semibold text-red-900">Submission Gagal</div>
+    <div class="mt-2 text-red-800 text-sm">Pulihkan jawaban ujian yang gagal submit.</div>
+  </a>
+  <button onclick="updateRankingData()" class="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 shadow-soft p-5 transition-all text-left w-full">
+    <div class="text-sm text-emerald-600 font-medium">🔄 Update</div>
+    <div class="mt-1 text-xl font-semibold text-emerald-900">Perbarui Peringkat</div>
+    <div class="mt-2 text-emerald-700 text-sm">Refresh data aktivitas untuk peringkat terbaru.</div>
+  </button>
 </div>
+
+<script>
+async function updateRankingData() {
+  const button = event.target.closest('button');
+  const originalContent = button.innerHTML;
+  
+  // Show loading state
+  button.disabled = true;
+  button.innerHTML = `
+    <div class="text-sm text-emerald-600 font-medium">🔄 Update</div>
+    <div class="mt-1 text-xl font-semibold text-emerald-900">Memperbarui...</div>
+    <div class="mt-2 text-emerald-700 text-sm">Sedang refresh data aktivitas...</div>
+  `;
+  
+  try {
+    const response = await fetch('/admin/update-ranking', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Show success state
+      button.innerHTML = `
+        <div class="text-sm text-green-600 font-medium">✅ Berhasil</div>
+        <div class="mt-1 text-xl font-semibold text-green-900">Data Diperbarui</div>
+        <div class="mt-2 text-green-700 text-sm">Cache peringkat telah di-refresh.</div>
+      `;
+      
+      // Reset after 3 seconds
+      setTimeout(() => {
+        button.disabled = false;
+        button.innerHTML = originalContent;
+      }, 3000);
+    } else {
+      throw new Error(result.message || 'Gagal memperbarui data');
+    }
+  } catch (error) {
+    console.error('Error updating ranking:', error);
+    
+    // Show error state
+    button.innerHTML = `
+      <div class="text-sm text-red-600 font-medium">❌ Gagal</div>
+      <div class="mt-1 text-xl font-semibold text-red-900">Update Gagal</div>
+      <div class="mt-2 text-red-700 text-sm">${error.message}</div>
+    `;
+    
+    // Reset after 3 seconds
+    setTimeout(() => {
+      button.disabled = false;
+      button.innerHTML = originalContent;
+    }, 3000);
+  }
+}
+</script>

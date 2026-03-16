@@ -585,6 +585,61 @@ router.get('/exams', async (req, res) => {
      ORDER BY e.id DESC;`,
     { tid: user.id }
   );
+
+  // Calculate participation percentage for each exam
+  for (let exam of exams) {
+    // Check if exam uses exam_classes system
+    const [examClassesCount] = await pool.query(
+      `SELECT COUNT(*) as count FROM exam_classes WHERE exam_id = ?`,
+      [exam.id]
+    );
+
+    let totalStudentsQuery;
+    let queryParams = [exam.id];
+
+    if (examClassesCount[0].count > 0) {
+      // Exam uses exam_classes system (new)
+      totalStudentsQuery = `
+        SELECT COUNT(DISTINCT u.id) as total 
+        FROM users u
+        INNER JOIN exam_classes ec ON ec.class_id = u.class_id
+        WHERE u.role = 'STUDENT' 
+        AND u.is_active = 1 
+        AND ec.exam_id = ?
+      `;
+    } else if (exam.class_id) {
+      // Exam uses old class_id system
+      totalStudentsQuery = `
+        SELECT COUNT(*) as total 
+        FROM users 
+        WHERE role = 'STUDENT' 
+        AND is_active = 1 
+        AND class_id = ?
+      `;
+      queryParams = [exam.class_id];
+    } else {
+      // Exam for all classes
+      totalStudentsQuery = `
+        SELECT COUNT(*) as total 
+        FROM users 
+        WHERE role = 'STUDENT' 
+        AND is_active = 1
+      `;
+      queryParams = [];
+    }
+
+    const [[totalStudentsResult]] = await pool.query(totalStudentsQuery, queryParams);
+    const [[completedResult]] = await pool.query(
+      `SELECT COUNT(DISTINCT student_id) as completed FROM attempts WHERE exam_id = ?`,
+      [exam.id]
+    );
+
+    exam.total_students = totalStudentsResult.total || 0;
+    exam.completed_count = completedResult.completed || 0;
+    exam.participation_percentage = exam.total_students > 0 ? 
+      Math.round((exam.completed_count / exam.total_students) * 100) : 0;
+  }
+
   res.render('teacher/exams', { title: 'Kelola Ujian', exams });
 });
 
@@ -608,16 +663,18 @@ router.post('/exams', async (req, res) => {
     max_attempts,
     shuffle_questions,
     shuffle_options,
-    access_code
+    access_code,
+    show_score_to_student,
+    show_review_to_student
   } = req.body;
 
   try {
     // Insert exam
     const [result] = await pool.query(
       `INSERT INTO exams
-        (subject_id, teacher_id, title, description, class_id, start_at, end_at, duration_minutes, pass_score, max_attempts, shuffle_questions, shuffle_options, access_code, is_published)
+        (subject_id, teacher_id, title, description, class_id, start_at, end_at, duration_minutes, pass_score, max_attempts, shuffle_questions, shuffle_options, access_code, show_score_to_student, show_review_to_student, is_published)
        VALUES
-        (:subject_id,:teacher_id,:title,:description,NULL,:start_at,:end_at,:duration_minutes,:pass_score,:max_attempts,:shuffle_questions,:shuffle_options,:access_code,0);`,
+        (:subject_id,:teacher_id,:title,:description,NULL,:start_at,:end_at,:duration_minutes,:pass_score,:max_attempts,:shuffle_questions,:shuffle_options,:access_code,:show_score_to_student,:show_review_to_student,0);`,
       {
         subject_id,
         teacher_id: user.id,
@@ -630,7 +687,9 @@ router.post('/exams', async (req, res) => {
         max_attempts: Number(max_attempts || 1),
         shuffle_questions: shuffle_questions ? 1 : 0,
         shuffle_options: shuffle_options ? 1 : 0,
-        access_code: access_code || null
+        access_code: access_code || null,
+        show_score_to_student: show_score_to_student ? 1 : 0,
+        show_review_to_student: show_review_to_student ? 1 : 0
       }
     );
 
@@ -787,7 +846,9 @@ router.put('/exams/:id', async (req, res) => {
     max_attempts,
     shuffle_questions,
     shuffle_options,
-    access_code
+    access_code,
+    show_score_to_student,
+    show_review_to_student
   } = req.body;
 
   try {
@@ -815,7 +876,9 @@ router.put('/exams/:id', async (req, res) => {
         max_attempts=:max_attempts,
         shuffle_questions=:shuffle_questions,
         shuffle_options=:shuffle_options,
-        access_code=:access_code
+        access_code=:access_code,
+        show_score_to_student=:show_score_to_student,
+        show_review_to_student=:show_review_to_student
        WHERE id=:id;`,
       {
         id: examId,
@@ -829,7 +892,9 @@ router.put('/exams/:id', async (req, res) => {
         max_attempts: Number(max_attempts || 1),
         shuffle_questions: shuffle_questions ? 1 : 0,
         shuffle_options: shuffle_options ? 1 : 0,
-        access_code: access_code || null
+        access_code: access_code || null,
+        show_score_to_student: show_score_to_student ? 1 : 0,
+        show_review_to_student: show_review_to_student ? 1 : 0
       }
     );
 
@@ -896,13 +961,40 @@ router.get('/exams/:id', async (req, res) => {
   let totalStudentsQuery;
   let queryParams = { exam_id: exam.id };
   
-  if (exam.class_id) {
-    // Ujian untuk kelas tertentu - hanya hitung siswa di kelas tersebut
-    totalStudentsQuery = `SELECT COUNT(*) as total FROM users WHERE role='STUDENT' AND class_id = :class_id`;
+  // Cek apakah ujian menggunakan sistem exam_classes (baru) atau class_id (lama)
+  const [examClassesCount] = await pool.query(
+    `SELECT COUNT(*) as count FROM exam_classes WHERE exam_id = :exam_id`,
+    { exam_id: exam.id }
+  );
+  
+  if (examClassesCount[0].count > 0) {
+    // Ujian menggunakan sistem exam_classes (baru) - hitung siswa di kelas yang ditargetkan
+    totalStudentsQuery = `
+      SELECT COUNT(DISTINCT u.id) as total 
+      FROM users u
+      INNER JOIN exam_classes ec ON ec.class_id = u.class_id
+      WHERE u.role = 'STUDENT' 
+      AND u.is_active = 1 
+      AND ec.exam_id = :exam_id
+    `;
+  } else if (exam.class_id) {
+    // Ujian menggunakan sistem lama dengan class_id tertentu
+    totalStudentsQuery = `
+      SELECT COUNT(*) as total 
+      FROM users 
+      WHERE role = 'STUDENT' 
+      AND is_active = 1 
+      AND class_id = :class_id
+    `;
     queryParams.class_id = exam.class_id;
   } else {
-    // Ujian untuk semua kelas - hitung semua siswa
-    totalStudentsQuery = `SELECT COUNT(*) as total FROM users WHERE role='STUDENT'`;
+    // Ujian untuk semua kelas (tidak ada target kelas)
+    totalStudentsQuery = `
+      SELECT COUNT(*) as total 
+      FROM users 
+      WHERE role = 'STUDENT' 
+      AND is_active = 1
+    `;
   }
   
   const [[totalStudentsResult]] = await pool.query(totalStudentsQuery, queryParams);
@@ -919,24 +1011,38 @@ router.get('/exams/:id', async (req, res) => {
   
   // Get list of students who completed the exam
   let completedStudentsQuery;
-  if (exam.class_id) {
+  if (examClassesCount[0].count > 0) {
+    // Ujian menggunakan sistem exam_classes (baru)
+    completedStudentsQuery = `
+      SELECT DISTINCT u.id, u.username, u.full_name, c.name as class_name,
+             MAX(a.created_at) as last_attempt
+      FROM users u
+      INNER JOIN attempts a ON a.student_id = u.id
+      INNER JOIN exam_classes ec ON ec.class_id = u.class_id
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT' AND u.is_active = 1 AND a.exam_id = :exam_id AND ec.exam_id = :exam_id
+      GROUP BY u.id
+      ORDER BY u.full_name ASC`;
+  } else if (exam.class_id) {
+    // Ujian menggunakan sistem lama dengan class_id tertentu
     completedStudentsQuery = `
       SELECT DISTINCT u.id, u.username, u.full_name, c.name as class_name,
              MAX(a.created_at) as last_attempt
       FROM users u
       INNER JOIN attempts a ON a.student_id = u.id
       LEFT JOIN classes c ON c.id = u.class_id
-      WHERE u.role='STUDENT' AND u.class_id = :class_id AND a.exam_id = :exam_id
+      WHERE u.role='STUDENT' AND u.is_active = 1 AND u.class_id = :class_id AND a.exam_id = :exam_id
       GROUP BY u.id
       ORDER BY u.full_name ASC`;
   } else {
+    // Ujian untuk semua kelas
     completedStudentsQuery = `
       SELECT DISTINCT u.id, u.username, u.full_name, c.name as class_name,
              MAX(a.created_at) as last_attempt
       FROM users u
       INNER JOIN attempts a ON a.student_id = u.id
       LEFT JOIN classes c ON c.id = u.class_id
-      WHERE u.role='STUDENT' AND a.exam_id = :exam_id
+      WHERE u.role='STUDENT' AND u.is_active = 1 AND a.exam_id = :exam_id
       GROUP BY u.id
       ORDER BY u.full_name ASC`;
   }
@@ -944,20 +1050,32 @@ router.get('/exams/:id', async (req, res) => {
   
   // Get list of students who haven't completed the exam
   let notCompletedStudentsQuery;
-  if (exam.class_id) {
+  if (examClassesCount[0].count > 0) {
+    // Ujian menggunakan sistem exam_classes (baru)
+    notCompletedStudentsQuery = `
+      SELECT u.id, u.username, u.full_name, c.name as class_name
+      FROM users u
+      INNER JOIN exam_classes ec ON ec.class_id = u.class_id
+      LEFT JOIN classes c ON c.id = u.class_id
+      WHERE u.role='STUDENT' AND u.is_active = 1 AND ec.exam_id = :exam_id
+      AND u.id NOT IN (SELECT DISTINCT student_id FROM attempts WHERE exam_id = :exam_id)
+      ORDER BY u.full_name ASC`;
+  } else if (exam.class_id) {
+    // Ujian menggunakan sistem lama dengan class_id tertentu
     notCompletedStudentsQuery = `
       SELECT u.id, u.username, u.full_name, c.name as class_name
       FROM users u
       LEFT JOIN classes c ON c.id = u.class_id
-      WHERE u.role='STUDENT' AND u.class_id = :class_id
+      WHERE u.role='STUDENT' AND u.is_active = 1 AND u.class_id = :class_id
       AND u.id NOT IN (SELECT DISTINCT student_id FROM attempts WHERE exam_id = :exam_id)
       ORDER BY u.full_name ASC`;
   } else {
+    // Ujian untuk semua kelas
     notCompletedStudentsQuery = `
       SELECT u.id, u.username, u.full_name, c.name as class_name
       FROM users u
       LEFT JOIN classes c ON c.id = u.class_id
-      WHERE u.role='STUDENT'
+      WHERE u.role='STUDENT' AND u.is_active = 1
       AND u.id NOT IN (SELECT DISTINCT student_id FROM attempts WHERE exam_id = :exam_id)
       ORDER BY u.full_name ASC`;
   }
