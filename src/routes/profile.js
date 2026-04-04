@@ -3,7 +3,6 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const sharp = require('sharp');
 const pool = require('../db/pool');
 const { requireAuth } = require('../middleware/auth');
 
@@ -99,18 +98,13 @@ router.post('/update', upload.single('profile_photo'), async (req, res) => {
         }
         
         // Generate unique filename
-        const filename = `profile_${userId}_${Date.now()}.webp`;
+        const ext = req.file.mimetype === 'image/png' ? 'png' : 'jpg';
+        const filename = `profile_${userId}_${Date.now()}.${ext}`;
         const filepath = path.join(profileDir, filename);
-        
-        // Compress and resize image using sharp
-        await sharp(req.file.buffer)
-          .resize(400, 400, {
-            fit: 'cover',
-            position: 'center'
-          })
-          .webp({ quality: 80 })
-          .toFile(filepath);
-        
+
+        // Simpan file langsung (tanpa resize)
+        fs.writeFileSync(filepath, req.file.buffer);
+
         profile_photo = `/public/uploads/profiles/${filename}`;
       } catch (err) {
         console.error('Error processing image:', err);
