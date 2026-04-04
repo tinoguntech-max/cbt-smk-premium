@@ -14,7 +14,7 @@ param(
 # Konfigurasi VPS
 $VPS = @{
     vps1 = @{ IP = "178.128.88.30";  User = "root"; Dir = "/var/www/lms-cbt"; Name = "psaj.smkn1kras.sch.id" }
-    vps2 = @{ IP = "178.128.217.57"; User = "root"; Dir = "/var/www/lms-cbt"; Name = "pts.smknegeri1kras.sch.id" }
+    vps2 = @{ IP = "152.42.215.132"; User = "root"; Dir = "/var/www/lms-cbt"; Name = "pts.smknegeri1kras.sch.id" }
 }
 
 if (-not $VPS.ContainsKey($Target)) {

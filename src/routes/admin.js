@@ -3802,4 +3802,81 @@ router.post('/update-ranking', async (req, res) => {
   }
 });
 
+// ===== SERVER MONITOR =====
+router.get('/monitor', async (req, res) => {
+  res.render('admin/monitor', { title: 'Server Monitor', layout: 'layout' });
+});
+
+// API endpoint untuk data monitor (polling setiap 3 detik)
+router.get('/monitor/data', async (req, res) => {
+  const { execSync } = require('child_process');
+
+  function safeExec(cmd) {
+    try { return execSync(cmd, { timeout: 3000 }).toString().trim(); } catch { return ''; }
+  }
+
+  // PM2 data
+  let pm2Data = [];
+  try {
+    const raw = safeExec('pm2 jlist');
+    const list = JSON.parse(raw || '[]');
+    pm2Data = list.map(p => ({
+      id: p.pm_id,
+      name: p.name,
+      status: p.pm2_env?.status,
+      cpu: p.monit?.cpu ?? 0,
+      memory: Math.round((p.monit?.memory ?? 0) / 1024 / 1024),
+      restarts: p.pm2_env?.restart_time ?? 0,
+      uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : 0
+    }));
+  } catch {}
+
+  // System stats
+  const memInfo = safeExec("free -m | awk 'NR==2{print $2,$3,$4}'").split(' ');
+  const cpuLoad = safeExec("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'") || '0';
+  const connections = safeExec('ss -tn | grep :3000 | wc -l') || '0';
+  const diskInfo = safeExec("df -h / | awk 'NR==2{print $2,$3,$4,$5}'").split(' ');
+
+  // DB stats
+  let dbStats = { connections: 0, uptime: 0 };
+  try {
+    const [rows] = await pool.query("SHOW STATUS WHERE Variable_name IN ('Threads_connected','Uptime')");
+    rows.forEach(r => {
+      if (r.Variable_name === 'Threads_connected') dbStats.connections = parseInt(r.Value);
+      if (r.Variable_name === 'Uptime') dbStats.uptime = parseInt(r.Value);
+    });
+  } catch {}
+
+  // Redis stats
+  let redisStats = { connected: false, memory: '0', clients: 0 };
+  try {
+    const redisInfo = safeExec('redis-cli info memory clients 2>/dev/null');
+    const memMatch = redisInfo.match(/used_memory_human:(.+)/);
+    const clientMatch = redisInfo.match(/connected_clients:(\d+)/);
+    redisStats = {
+      connected: !!memMatch,
+      memory: memMatch ? memMatch[1].trim() : '0',
+      clients: clientMatch ? parseInt(clientMatch[1]) : 0
+    };
+  } catch {}
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    pm2: pm2Data,
+    system: {
+      memTotal: parseInt(memInfo[0]) || 0,
+      memUsed: parseInt(memInfo[1]) || 0,
+      memFree: parseInt(memInfo[2]) || 0,
+      cpuLoad: parseFloat(cpuLoad) || 0,
+      connections: parseInt(connections) || 0,
+      diskTotal: diskInfo[0] || '-',
+      diskUsed: diskInfo[1] || '-',
+      diskFree: diskInfo[2] || '-',
+      diskPercent: diskInfo[3] || '-'
+    },
+    db: dbStats,
+    redis: redisStats
+  });
+});
+
 module.exports = router;
