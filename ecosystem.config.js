@@ -2,10 +2,10 @@ module.exports = {
   apps: [{
     name: 'lms-smkn1kras',
     script: './src/server.js',
-    instances: 'max', // Gunakan semua CPU cores
-    exec_mode: 'cluster', // Cluster mode untuk load balancing
-    watch: false, // Disable watch di production
-    max_memory_restart: '1G', // Restart jika memory > 1GB
+    instances: 'max',      // semua CPU cores, aman karena pakai Redis adapter
+    exec_mode: 'cluster',  // cluster mode untuk load balancing
+    watch: false,
+    max_memory_restart: '1G',
     env: {
       NODE_ENV: 'production',
       PORT: 3000

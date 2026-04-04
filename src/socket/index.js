@@ -1,16 +1,55 @@
 const { Server } = require('socket.io');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { createClient } = require('redis');
 const pool = require('../db/pool');
 
 let io = null;
 
-function initializeSocket(server) {
+async function createRedisAdapter() {
+  // Hanya aktif jika REDIS_HOST dikonfigurasi
+  if (!process.env.REDIS_HOST) return null;
+
+  try {
+    const pubClient = createClient({
+      socket: {
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT) || 6379,
+        reconnectStrategy: (retries) => Math.min(retries * 100, 3000)
+      },
+      password: process.env.REDIS_PASSWORD || undefined
+    });
+
+    const subClient = pubClient.duplicate();
+
+    pubClient.on('error', (err) => console.error('Socket.io Redis pub error:', err.message));
+    subClient.on('error', (err) => console.error('Socket.io Redis sub error:', err.message));
+
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    console.log('✅ Socket.io Redis adapter connected');
+    return createAdapter(pubClient, subClient);
+  } catch (err) {
+    console.error('❌ Socket.io Redis adapter failed, fallback to in-memory:', err.message);
+    return null;
+  }
+}
+
+async function initializeSocket(server) {
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:3000',
+      origin: process.env.CLIENT_URL || '*',
       methods: ['GET', 'POST'],
       credentials: true
     }
   });
+
+  // Pasang Redis adapter jika tersedia (wajib untuk multi-instance/cluster)
+  const adapter = await createRedisAdapter();
+  if (adapter) {
+    io.adapter(adapter);
+    console.log('✅ Socket.io menggunakan Redis adapter (cluster-ready)');
+  } else {
+    console.log('⚠️  Socket.io menggunakan in-memory adapter (single instance only)');
+  }
 
   // Middleware untuk autentikasi
   io.use(async (socket, next) => {

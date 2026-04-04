@@ -45,7 +45,7 @@ let redisClient = null;
 let isRedisConnected = false;
 
 // Only try to connect to Redis if configured
-if (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost') {
+if (process.env.REDIS_HOST) {
   redisClient = createClient({
     socket: {
       host: process.env.REDIS_HOST,
@@ -199,7 +199,7 @@ const server = app.listen(port, () => {
 
 // Initialize Socket.io
 const { initializeSocket } = require('./socket');
-initializeSocket(server);
+initializeSocket(server).catch(err => console.error('Socket.io init error:', err));
 
 // ===== AUTO-SUBMIT CRON JOB =====
 const cron = require('node-cron');

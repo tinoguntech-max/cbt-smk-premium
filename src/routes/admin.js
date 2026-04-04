@@ -1047,11 +1047,12 @@ router.get('/teachers/download', async (req, res) => {
 router.post('/teachers', async (req, res) => {
   const { username, full_name, password } = req.body;
   try {
-    const password_hash = await bcrypt.hash(password || '123456', 10);
+    const plainPwd = password || '123456';
+    const password_hash = await bcrypt.hash(plainPwd, 10);
     await pool.query(
-      `INSERT INTO users (username, full_name, role, class_id, password_hash, is_active)
-       VALUES (:username,:full_name,'TEACHER',NULL,:password_hash,1);`,
-      { username, full_name, password_hash }
+      `INSERT INTO users (username, full_name, role, class_id, password_hash, plain_password, is_active)
+       VALUES (:username,:full_name,'TEACHER',NULL,:password_hash,:plain_password,1);`,
+      { username, full_name, password_hash, plain_password: plainPwd }
     );
     req.flash('success', 'Guru ditambahkan.');
   } catch (e) {
@@ -1153,10 +1154,10 @@ router.post('/teachers/:id/ajax-update', async (req, res) => {
 
 router.post('/teachers/:id/reset', async (req, res) => {
   try {
-    const password_hash = await bcrypt.hash(req.body.new_password || '123456', 10);
-    await pool.query(`UPDATE users SET password_hash=:ph WHERE id=:id AND role='TEACHER';`, {
-      ph: password_hash,
-      id: req.params.id
+    const plainPwd = req.body.new_password || '123456';
+    const password_hash = await bcrypt.hash(plainPwd, 10);
+    await pool.query(`UPDATE users SET password_hash=:ph, plain_password=:pp WHERE id=:id AND role='TEACHER';`, {
+      ph: password_hash, pp: plainPwd, id: req.params.id
     });
     req.flash('success', 'Password guru direset.');
   } catch (e) {
@@ -1285,21 +1286,24 @@ router.post('/teachers/import/commit', async (req, res) => {
     for (const it of items) {
       const pwd = String(it.password || '').trim();
       const setPassword = pwd ? 1 : 0;
-      const password_hash = await bcrypt.hash(pwd || '123456', 10);
+      const plainPwd = pwd || '123456';
+      const password_hash = await bcrypt.hash(plainPwd, 10);
 
       await conn.query(
-        `INSERT INTO users (username, full_name, role, class_id, password_hash, is_active)
-         VALUES (:username,:full_name,'TEACHER',NULL,:password_hash,1)
+        `INSERT INTO users (username, full_name, role, class_id, password_hash, plain_password, is_active)
+         VALUES (:username,:full_name,'TEACHER',NULL,:password_hash,:plain_password,1)
          ON DUPLICATE KEY UPDATE
            full_name=VALUES(full_name),
            role='TEACHER',
            class_id=NULL,
            is_active=1,
-           password_hash=IF(:setPassword=1, :password_hash, password_hash);`,
+           password_hash=IF(:setPassword=1, :password_hash, password_hash),
+           plain_password=IF(:setPassword=1, :plain_password, plain_password);`,
         {
           username: it.username,
           full_name: it.full_name,
           password_hash,
+          plain_password: plainPwd,
           setPassword
         }
       );
@@ -1438,7 +1442,7 @@ router.get('/users', async (req, res) => {
      FROM users u
      LEFT JOIN classes c ON c.id=u.class_id
      ${whereClause}
-     ORDER BY u.id DESC
+     ORDER BY c.name DESC, u.full_name ASC
      LIMIT :limit OFFSET :offset;`,
     { ...queryParams, limit, offset }
   );
@@ -1539,7 +1543,7 @@ router.get('/users/print-cards', async (req, res) => {
   try {
     const { ids, role, class_id } = req.query;
     
-    let query = 'SELECT u.id, u.username, u.full_name, u.role, c.name AS class_name FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE 1=1';
+    let query = 'SELECT u.id, u.username, u.full_name, u.role, u.plain_password, u.profile_photo, c.name AS class_name FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE 1=1';
     const params = {};
     
     // Filter by specific IDs
@@ -1562,7 +1566,7 @@ router.get('/users/print-cards', async (req, res) => {
       params.class_id = class_id;
     }
     
-    query += ' ORDER BY u.full_name ASC;';
+    query += ' ORDER BY c.name ASC, u.full_name ASC;';
     
     const [users] = await pool.query(query, params);
     
@@ -1595,6 +1599,83 @@ router.get('/users/print-cards', async (req, res) => {
     req.flash('error', 'Gagal memuat halaman cetak kartu.');
     res.redirect('/admin/users');
   }
+});
+
+// ===== IMPORT PASSWORD =====
+
+// GET - halaman import password
+router.get('/users/import-password', (req, res) => {
+  res.render('admin/import_password', { title: 'Import Password Siswa' });
+});
+
+// GET - download template Excel
+router.get('/users/import-password/template', (req, res) => {
+  const XLSX = require('xlsx');
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['username', 'password'],
+    ['0091774774@smkn1kras.sch.id', 'password_baru'],
+    ['0097925888@smkn1kras.sch.id', 'password_baru'],
+  ]);
+  ws['!cols'] = [{ wch: 40 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Password');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename="template_import_password.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
+// POST - proses import password
+router.post('/users/import-password', uploadImport.single('file'), async (req, res) => {
+  if (!req.file) {
+    req.flash('error', 'File tidak ditemukan.');
+    return res.redirect('/admin/users/import-password');
+  }
+
+  const XLSX = require('xlsx');
+  let rows = [];
+  try {
+    const wb = XLSX.readFile(req.file.path);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  } catch (e) {
+    req.flash('error', 'Gagal membaca file. Pastikan format Excel atau CSV.');
+    return res.redirect('/admin/users/import-password');
+  }
+
+  const result = { updated: 0, notFound: 0, errors: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNo = i + 2;
+
+    // Ambil username dan password dari berbagai kemungkinan nama kolom
+    const username = String(row['username'] || row['nis'] || row['Username'] || row['NIS'] || '').trim();
+    const password = String(row['password'] || row['pwd'] || row['Password'] || row['PWD'] || '').trim();
+
+    if (!username) continue;
+    if (!password) { result.errors.push({ row: rowNo, msg: `${username}: password kosong, dilewati` }); continue; }
+
+    try {
+      const password_hash = await bcrypt.hash(password, 10);
+      const [upd] = await pool.query(
+        `UPDATE users SET password_hash = :ph, plain_password = :pp WHERE username = :username`,
+        { ph: password_hash, pp: password, username }
+      );
+      if (upd.affectedRows > 0) result.updated++;
+      else result.notFound++;
+    } catch (e) {
+      result.errors.push({ row: rowNo, msg: `${username}: ${e.message}` });
+    }
+  }
+
+  // Hapus file temp
+  try { require('fs').unlinkSync(req.file.path); } catch (_) {}
+
+  res.render('admin/import_password', {
+    title: 'Import Password Siswa',
+    result
+  });
 });
 
 // JSON endpoint untuk modal edit (AJAX)
@@ -1845,23 +1926,26 @@ router.post('/users/import/commit', async (req, res) => {
     for (const it of items) {
       const pwd = String(it.password || '').trim();
       const setPassword = pwd ? 1 : 0;
-      const password_hash = await bcrypt.hash(pwd || '123456', 10);
+      const plainPwd = pwd || '123456';
+      const password_hash = await bcrypt.hash(plainPwd, 10);
 
       await conn.query(
-        `INSERT INTO users (username, full_name, role, class_id, password_hash, is_active)
-         VALUES (:username,:full_name,'STUDENT',:class_id,:password_hash,1)
+        `INSERT INTO users (username, full_name, role, class_id, password_hash, plain_password, is_active)
+         VALUES (:username,:full_name,'STUDENT',:class_id,:password_hash,:plain_password,1)
          ON DUPLICATE KEY UPDATE
            full_name=VALUES(full_name),
            role='STUDENT',
            class_id=VALUES(class_id),
            is_active=1,
-           password_hash=IF(:setPassword=1, :password_hash, password_hash);
+           password_hash=IF(:setPassword=1, :password_hash, password_hash),
+           plain_password=IF(:setPassword=1, :plain_password, plain_password);
         `,
         {
           username: it.username,
           full_name: it.full_name,
           class_id: it.class_id || null,
           password_hash,
+          plain_password: plainPwd,
           setPassword
         }
       );
@@ -1888,16 +1972,18 @@ router.post('/users/import/commit', async (req, res) => {
 router.post('/users', async (req, res) => {
   const { username, full_name, role, class_id, password } = req.body;
   try {
-    const password_hash = await bcrypt.hash(password || '123456', 10);
+    const plainPwd = password || '123456';
+    const password_hash = await bcrypt.hash(plainPwd, 10);
     await pool.query(
-      `INSERT INTO users (username, full_name, role, class_id, password_hash)
-       VALUES (:username,:full_name,:role,:class_id,:password_hash);`,
+      `INSERT INTO users (username, full_name, role, class_id, password_hash, plain_password)
+       VALUES (:username,:full_name,:role,:class_id,:password_hash,:plain_password);`,
       {
         username,
         full_name,
         role,
         class_id: class_id || null,
-        password_hash
+        password_hash,
+        plain_password: plainPwd
       }
     );
     req.flash('success', 'Pengguna ditambahkan.');
@@ -1910,8 +1996,11 @@ router.post('/users', async (req, res) => {
 
 router.post('/users/:id/reset', async (req, res) => {
   try {
-    const password_hash = await bcrypt.hash(req.body.new_password || '123456', 10);
-    await pool.query(`UPDATE users SET password_hash=:ph WHERE id=:id;`, { ph: password_hash, id: req.params.id });
+    const plainPwd = req.body.new_password || '123456';
+    const password_hash = await bcrypt.hash(plainPwd, 10);
+    await pool.query(`UPDATE users SET password_hash=:ph, plain_password=:pp WHERE id=:id;`, {
+      ph: password_hash, pp: plainPwd, id: req.params.id
+    });
     req.flash('success', 'Password direset.');
   } catch (e) {
     console.error(e);

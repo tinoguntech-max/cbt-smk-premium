@@ -3,9 +3,9 @@
   <div>
     <div class="text-sm text-slate-500 mb-1">Edit Soal</div>
     <h1 class="text-2xl font-bold bg-gradient-to-r from-violet-600 to-pink-500 bg-clip-text text-transparent"><%= exam.title %></h1>
-    <p class="mt-1 text-slate-500 text-sm">Perbarui teks soal, gambar, poin, dan kunci jawaban (Aï¿½E).</p>
+    <p class="mt-1 text-slate-500 text-sm">Perbarui teks soal, gambar, poin, dan kunci jawaban (A-E).</p>
   </div>
-  <a href="/teacher/exams/<%= exam.id %>" class="text-sm px-4 py-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-100 hover:from-rose-100 hover:to-pink-200 text-rose-700 font-medium transition-all shadow-sm">Kembali</a>
+  <a href="<%= user.role === 'ADMIN' ? '/admin/exams/' + exam.id : '/teacher/exams/' + exam.id %>" class="text-sm px-4 py-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-100 hover:from-rose-100 hover:to-pink-200 text-rose-700 font-medium transition-all shadow-sm">Kembali</a>
 </div>
 
 <form action="/teacher/questions/<%= question.id %>?_method=PUT" method="POST" enctype="multipart/form-data" id="editQuestionForm" class="space-y-5">
@@ -146,7 +146,7 @@
       class="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 hover:from-violet-600 hover:to-pink-600 text-white font-bold py-3 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02]">
       Simpan Perubahan
     </button>
-    <a href="/teacher/exams/<%= exam.id %>"
+    <a href="<%= user.role === 'ADMIN' ? '/admin/exams/' + exam.id : '/teacher/exams/' + exam.id %>"
       class="flex-1 text-center rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold py-3 transition-all">
       Batal
     </a>

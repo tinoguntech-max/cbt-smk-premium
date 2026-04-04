@@ -5,376 +5,315 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= title %></title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&family=Source+Code+Pro:wght@600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', 'Segoe UI', sans-serif; background: #f0f0f0; }
+
+    /* ===== PRINT CONTROLS ===== */
+    .print-controls {
+      text-align: center; padding: 20px; background: white;
+      margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    
-    body {
-      font-family: 'Arial', sans-serif;
-      background: #f5f5f5;
+    .print-controls h2 { color: #1a5c2a; margin-bottom: 12px; font-size: 18px; }
+    .filter-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .filter-select {
+      padding: 7px 14px; border-radius: 8px; border: 2px solid #e2e8f0;
+      font-size: 13px; font-weight: 600; color: #475569; background: white; cursor: pointer;
     }
-    
-    .print-container {
+    .filter-select:focus { outline: none; border-color: #1a5c2a; }
+    .btn {
+      display: inline-block; padding: 9px 20px; margin: 0 5px;
+      border-radius: 8px; font-weight: 600; text-decoration: none;
+      cursor: pointer; border: none; font-size: 13px;
+    }
+    .btn-print { background: #1a5c2a; color: white; }
+    .btn-print:hover { background: #145022; }
+    .btn-back  { background: #e2e8f0; color: #475569; }
+
+    /* Pagination */
+    .pagination {
+      display: flex; gap: 6px; justify-content: center;
+      align-items: center; margin-top: 16px; flex-wrap: wrap;
+    }
+    .page-info { font-size: 13px; color: #555; margin: 0 8px; }
+    .page-btn {
+      padding: 6px 14px; border-radius: 6px; border: 2px solid #1a5c2a;
+      background: white; color: #1a5c2a; font-weight: 600; font-size: 13px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .page-btn:hover, .page-btn.active { background: #1a5c2a; color: white; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ===== A4 PAGE ===== */
+    .a4-page {
       width: 210mm;
-      margin: 0 auto;
-      padding: 10mm;
+      min-height: 297mm;
+      margin: 0 auto 10mm;
       background: white;
+      padding: 8mm;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      display: none; /* hidden by default, JS shows active page */
     }
-    
+    .a4-page.active { display: block; }
+
     .cards-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 8mm;
-      page-break-inside: avoid;
+      gap: 5mm;
     }
-    
+
+    /* ===== KARTU ===== */
     .login-card {
-      width: 90mm;
-      height: 55mm;
-      border: 2px solid #4F46E5;
-      border-radius: 8px;
-      padding: 8mm;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      position: relative;
+      width: 95mm;
+      height: 62mm;
+      background: white;
+      border-radius: 6px;
       overflow: hidden;
-      page-break-inside: avoid;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      position: relative;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #e0e0e0;
     }
-    
-    .card-pattern {
-      position: absolute;
-      top: -20px;
-      right: -20px;
-      width: 100px;
-      height: 100px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 50%;
-    }
-    
-    .card-pattern-2 {
-      position: absolute;
-      bottom: -30px;
-      left: -30px;
-      width: 80px;
-      height: 80px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 50%;
-    }
-    
+
     .card-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-      position: relative;
-      z-index: 1;
+      background: #1a7a35;
+      padding: 5px 8px;
+      display: flex; align-items: center; gap: 6px;
+      min-height: 16mm;
+      position: relative; overflow: hidden;
     }
-    
+    .card-header::after {
+      content: '';
+      position: absolute; top: 0; right: 0;
+      width: 0; height: 0; border-style: solid;
+      border-width: 0 16mm 16mm 0;
+      border-color: transparent #e07b00 transparent transparent;
+    }
     .card-logo {
-      width: 35px;
-      height: 35px;
-      background: white;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      padding: 4px;
+      width: 26px; height: 26px; background: white;
+      border-radius: 4px; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; padding: 2px; z-index: 1;
     }
-    
-    .card-logo img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    
-    .card-school {
-      flex: 1;
-    }
-    
-    .school-name {
-      font-size: 11px;
-      font-weight: bold;
-      line-height: 1.2;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
-    
-    .school-address {
-      font-size: 8px;
-      opacity: 0.9;
-      margin-top: 2px;
-    }
-    
+    .card-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .card-school-info { z-index: 1; }
+    .school-name { font-size: 9.5px; font-weight: 800; color: white; line-height: 1.3; font-family: 'Poppins', sans-serif; }
+    .school-sub  { font-size: 7px; color: rgba(255,255,255,0.85); margin-top: 1px; font-family: 'Poppins', sans-serif; }
+
     .card-body {
-      background: rgba(255,255,255,0.95);
-      border-radius: 6px;
-      padding: 8px 10px;
-      margin-top: 8px;
-      position: relative;
-      z-index: 1;
+      flex: 1; display: flex; padding: 4px 6px; gap: 5px;
+      position: relative; overflow: hidden;
     }
-    
-    .user-name {
-      font-size: 13px;
-      font-weight: bold;
-      color: #1e293b;
-      margin-bottom: 6px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .card-body::before {
+      content: ''; position: absolute; bottom: 0; left: 0;
+      width: 0; height: 0; border-style: solid;
+      border-width: 10mm 0 0 10mm;
+      border-color: transparent transparent transparent #1a7a35;
+      opacity: 0.12;
     }
-    
-    .user-role {
-      display: inline-block;
-      font-size: 9px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 600;
-      margin-bottom: 8px;
+    .card-body::after {
+      content: ''; position: absolute; bottom: 0; right: 0;
+      width: 0; height: 0; border-style: solid;
+      border-width: 0 0 8mm 8mm;
+      border-color: transparent transparent #1a7a35 transparent;
+      opacity: 0.10;
     }
-    
-    .role-teacher {
-      background: #dbeafe;
-      color: #1e40af;
+
+    .card-left { flex: 1; display: flex; flex-direction: column; justify-content: center; z-index: 1; }
+    .card-title {
+      font-size: 15px; font-weight: 900; color: #1a5c2a;
+      text-transform: uppercase; letter-spacing: 1px; line-height: 1.1; margin-bottom: 3px;
+      font-family: 'Poppins', sans-serif;
     }
-    
-    .role-student {
-      background: #dcfce7;
-      color: #166534;
+    .card-title-underline {
+      width: 26mm; height: 3px;
+      background: linear-gradient(to right, #1a7a35 60%, #e07b00 40%);
+      margin-bottom: 5px;
     }
-    
-    .user-class {
-      font-size: 9px;
-      color: #64748b;
-      margin-bottom: 8px;
+    .info-row {
+      display: flex; align-items: flex-start;
+      font-size: 10.5px; color: #1a1a1a; margin-bottom: 3px; line-height: 1.4;
+      font-family: 'Poppins', sans-serif;
     }
-    
-    .credentials {
-      border-top: 1px dashed #cbd5e1;
-      padding-top: 6px;
+    .info-label { width: 18mm; font-weight: 700; color: #1a5c2a; flex-shrink: 0; }
+    .info-sep   { margin-right: 4px; color: #555; font-weight: 600; }
+    .info-value { font-weight: 500; color: #111; word-break: break-all; }
+    .info-value.mono {
+      font-family: 'Source Code Pro', 'Courier New', monospace;
+      font-weight: 700; font-size: 10px;
+      color: #0f172a; letter-spacing: 0.3px;
     }
-    
-    .credential-row {
-      display: flex;
-      align-items: center;
-      margin-bottom: 4px;
+
+    .card-photo-wrap {
+      width: 20mm; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; z-index: 1;
     }
-    
-    .credential-label {
-      font-size: 9px;
-      color: #64748b;
-      width: 65px;
-      font-weight: 600;
+    .hexagon {
+      width: 18mm; height: 20mm;
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      background: #1a7a35; display: flex; align-items: center;
+      justify-content: center; overflow: hidden;
     }
-    
-    .credential-value {
-      font-size: 11px;
-      color: #0f172a;
-      font-weight: bold;
-      font-family: 'Courier New', monospace;
-      background: #f1f5f9;
-      padding: 3px 6px;
-      border-radius: 4px;
-      flex: 1;
-    }
-    
+    .hexagon img { width: 100%; height: 100%; object-fit: cover; }
+    .hexagon-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; }
+
     .card-footer {
-      margin-top: 6px;
-      text-align: center;
-      font-size: 8px;
-      opacity: 0.8;
-      position: relative;
-      z-index: 1;
+      background: #1a7a35; padding: 2px 8px;
+      text-align: center; font-size: 6px;
+      color: rgba(255,255,255,0.9); letter-spacing: 0.3px;
     }
-    
-    .print-controls {
-      text-align: center;
-      padding: 20px;
-      background: white;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .btn {
-      display: inline-block;
-      padding: 12px 24px;
-      margin: 0 8px;
-      border-radius: 8px;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
-      border: none;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-    
-    .btn-secondary {
-      background: #e2e8f0;
-      color: #475569;
-    }
-    
-    .btn-secondary:hover {
-      background: #cbd5e1;
-    }
-    
-    .filter-select {
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: 2px solid #e2e8f0;
-      font-size: 14px;
-      font-weight: 600;
-      color: #475569;
-      background: white;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    
-    .filter-select:hover {
-      border-color: #cbd5e1;
-    }
-    
-    .filter-select:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
+
+    /* ===== PRINT ===== */
     @media print {
-      body {
-        background: white;
-      }
-      
-      .print-controls {
-        display: none;
-      }
-      
-      .print-container {
-        width: 100%;
-        padding: 0;
-      }
-      
-      .cards-grid {
-        page-break-inside: avoid;
-      }
-      
-      .login-card {
-        page-break-inside: avoid;
+      body { background: white; }
+      .print-controls { display: none; }
+      .a4-page {
+        display: block !important;
+        width: 100%; margin: 0; padding: 5mm;
         box-shadow: none;
+        page-break-after: always;
       }
-      
-      @page {
-        size: A4;
-        margin: 10mm;
-      }
+      .a4-page:last-child { page-break-after: auto; }
+      .login-card { box-shadow: none; }
+      @page { size: A4; margin: 5mm; }
     }
   </style>
 </head>
 <body>
-  <div class="print-container">
-    <!-- Print Controls -->
-    <div class="print-controls">
-      <h2 style="margin-bottom: 16px; color: #1e293b;">Cetak Kartu Login (<%= users.length %> Kartu)</h2>
-      
-      <!-- Filter Form -->
-      <form method="GET" action="/admin/users/print-cards" style="margin-bottom: 20px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-        <select name="role" class="filter-select" onchange="this.form.submit()">
-          <option value="">Semua Role</option>
-          <option value="TEACHER" <%= role === 'TEACHER' ? 'selected' : '' %>>Guru</option>
-          <option value="STUDENT" <%= role === 'STUDENT' ? 'selected' : '' %>>Siswa</option>
-        </select>
-        
-        <select name="class_id" class="filter-select" onchange="this.form.submit()">
-          <option value="">Semua Kelas</option>
-          <% if (typeof classes !== 'undefined') { %>
-            <% classes.forEach(c => { %>
-              <option value="<%= c.id %>" <%= class_id == c.id ? 'selected' : '' %>><%= c.name %></option>
-            <% }); %>
-          <% } %>
-        </select>
-        
-        <button type="button" onclick="window.location.href='/admin/users/print-cards'" class="btn" style="background: #f1f5f9; color: #475569; padding: 8px 16px;">
-          Reset Filter
-        </button>
-      </form>
-      
-      <div style="display: flex; gap: 12px; justify-content: center;">
-        <button onclick="window.print()" class="btn btn-primary">🖨️ Cetak Kartu</button>
-        <a href="/admin/users" class="btn btn-secondary">← Kembali</a>
-      </div>
+
+  <!-- Print Controls -->
+  <div class="print-controls">
+    <h2>Cetak Kartu Login &mdash; <%= users.length %> Kartu</h2>
+
+    <form method="GET" action="/admin/users/print-cards" class="filter-row">
+      <select name="role" class="filter-select" onchange="this.form.submit()">
+        <option value="">Semua Role</option>
+        <option value="TEACHER" <%= role === 'TEACHER' ? 'selected' : '' %>>Guru</option>
+        <option value="STUDENT" <%= role === 'STUDENT' ? 'selected' : '' %>>Siswa</option>
+      </select>
+      <select name="class_id" class="filter-select" onchange="this.form.submit()">
+        <option value="">Semua Kelas</option>
+        <% classes.forEach(c => { %>
+          <option value="<%= c.id %>" <%= class_id == c.id ? 'selected' : '' %>><%= c.name %></option>
+        <% }); %>
+      </select>
+      <button type="button" onclick="window.location.href='/admin/users/print-cards'" class="btn btn-back">Reset</button>
+    </form>
+
+    <div>
+      <button onclick="window.print()" class="btn btn-print">🖨️ Cetak Semua</button>
+      <a href="/admin/users" class="btn btn-back">← Kembali</a>
     </div>
-    
-    <!-- Cards Grid -->
-    <% for (let i = 0; i < users.length; i += 4) { %>
-      <div class="cards-grid" style="<%= i > 0 ? 'margin-top: 8mm;' : '' %>">
-        <% for (let j = i; j < Math.min(i + 4, users.length); j++) { 
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+    <div class="page-info" id="pageInfo"></div>
+  </div>
+
+  <!-- Pages -->
+  <%
+    const CARDS_PER_PAGE = 8;
+    const totalPages = Math.ceil(users.length / CARDS_PER_PAGE);
+  %>
+
+  <% for (let p = 0; p < totalPages; p++) { %>
+    <div class="a4-page <%= p === 0 ? 'active' : '' %>" id="page-<%= p %>">
+      <div class="cards-grid">
+        <% for (let j = p * CARDS_PER_PAGE; j < Math.min((p + 1) * CARDS_PER_PAGE, users.length); j++) {
           const user = users[j];
-          const roleClass = user.role === 'TEACHER' ? 'role-teacher' : 'role-student';
-          const roleText = user.role === 'TEACHER' ? 'GURU' : 'SISWA';
+          const roleText = user.role === 'TEACHER' ? 'GURU' : user.role === 'ADMIN' ? 'ADMIN' : 'SISWA';
+          const photoSrc = user.profile_photo ? '/public/uploads/photos/' + user.profile_photo : null;
+          const password = user.plain_password || '123456';
         %>
-          <div class="login-card">
-            <div class="card-pattern"></div>
-            <div class="card-pattern-2"></div>
-            
-            <div class="card-header">
-              <div class="card-logo">
-                <img src="/images/logo.png" alt="Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='🎓';">
-              </div>
-              <div class="card-school">
-                <div class="school-name"><%= schoolInfo.name %></div>
-                <div class="school-address"><%= schoolInfo.address %></div>
-              </div>
+        <div class="login-card">
+          <div class="card-header">
+            <div class="card-logo">
+              <img src="/public/images/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.innerHTML='🎓';">
             </div>
-            
-            <div class="card-body">
-              <div class="user-name"><%= user.full_name %></div>
-              <div>
-                <span class="user-role <%= roleClass %>"><%= roleText %></span>
-              </div>
-              <% if (user.class_name) { %>
-                <div class="user-class">📚 Kelas: <%= user.class_name %></div>
-              <% } %>
-              
-              <div class="credentials">
-                <div class="credential-row">
-                  <div class="credential-label">Username:</div>
-                  <div class="credential-value"><%= user.username %></div>
-                </div>
-                <div class="credential-row">
-                  <div class="credential-label">Password:</div>
-                  <div class="credential-value"><%= user.username %></div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="card-footer">
-              Simpan kartu ini dengan baik • Jangan bagikan ke orang lain
+            <div class="card-school-info">
+              <div class="school-name"><%= schoolInfo.name %></div>
+              <div class="school-sub"><%= schoolInfo.address %></div>
             </div>
           </div>
+
+          <div class="card-body">
+            <div class="card-left">
+              <div class="card-title">Kartu Login</div>
+              <div class="card-title-underline"></div>
+              <div class="info-row">
+                <span class="info-label">Nama</span>
+                <span class="info-sep">:</span>
+                <span class="info-value"><%= user.full_name %></span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Kelas</span>
+                <span class="info-sep">:</span>
+                <span class="info-value"><%= user.class_name || roleText %></span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Username</span>
+                <span class="info-sep">:</span>
+                <span class="info-value mono"><%= user.username %></span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Password</span>
+                <span class="info-sep">:</span>
+                <span class="info-value mono"><%= password %></span>
+              </div>
+            </div>
+
+            <div class="card-photo-wrap">
+              <div class="hexagon">
+                <% if (photoSrc) { %>
+                  <img src="<%= photoSrc %>" alt="Foto">
+                <% } else { %>
+                  <div class="hexagon-placeholder">👤</div>
+                <% } %>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            Simpan kartu ini &bull; Jangan bagikan ke orang lain &bull; <%= schoolInfo.name %>
+          </div>
+        </div>
         <% } %>
       </div>
-      <% if (i + 4 < users.length) { %>
-        <div style="page-break-after: always;"></div>
-      <% } %>
-    <% } %>
-  </div>
-  
+    </div>
+  <% } %>
+
   <script>
-    // Auto print on load (optional)
-    // window.onload = () => setTimeout(() => window.print(), 500);
+    const totalPages = <%= totalPages %>;
+    let currentPage = 0;
+
+    function showPage(p) {
+      document.querySelectorAll('.a4-page').forEach(el => el.classList.remove('active'));
+      document.getElementById('page-' + p).classList.add('active');
+      currentPage = p;
+      renderPagination();
+      window.scrollTo(0, 0);
+    }
+
+    function renderPagination() {
+      const pg = document.getElementById('pagination');
+      const info = document.getElementById('pageInfo');
+      const start = currentPage * 8 + 1;
+      const end = Math.min((currentPage + 1) * 8, <%= users.length %>);
+      info.textContent = `Halaman ${currentPage + 1} dari ${totalPages} (kartu ${start}–${end} dari <%= users.length %>)`;
+
+      let html = `<button class="page-btn" onclick="showPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>‹ Prev</button>`;
+      for (let i = 0; i < totalPages; i++) {
+        if (totalPages <= 10 || Math.abs(i - currentPage) <= 2 || i === 0 || i === totalPages - 1) {
+          html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="showPage(${i})">${i + 1}</button>`;
+        } else if (Math.abs(i - currentPage) === 3) {
+          html += `<span style="padding:0 4px;color:#999">…</span>`;
+        }
+      }
+      html += `<button class="page-btn" onclick="showPage(${currentPage + 1})" ${currentPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>`;
+      pg.innerHTML = html;
+    }
+
+    renderPagination();
   </script>
 </body>
 </html>
